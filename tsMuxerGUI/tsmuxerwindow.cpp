@@ -3029,6 +3029,7 @@ void TsMuxerWindow::saveChoices()
         else if (auto* edit = qobject_cast<QLineEdit*>(w))
             settings->setValue(key, edit->text());
     }
+    settings->setValue(QStringLiteral("m2tsNumDefault1"), true);  // see restoreChoices()
     settings->endGroup();
 }
 
@@ -3087,6 +3088,12 @@ void TsMuxerWindow::restoreChoices(QSettings& from)
             edit->setText(v.toString());
         }
     }
+    // The first clip used to be 00000 by default, the number of the playlist, and a media manager (tinyMediaManager)
+    // then reads the playlist of an ISO instead of its film. It is 1 by default now; a 0 stored by an earlier version,
+    // with the playlist at 0 as well, is that old default and is moved to 1 once. A 0 chosen after that is kept.
+    if (!from.contains(QStringLiteral("m2tsNumDefault1")) && ui->spinBoxM2tsNum->value() == 0 &&
+        ui->spinBoxMplsNum->value() == 0)
+        ui->spinBoxM2tsNum->setValue(1);
     from.endGroup();
     // These follow clicks rather than changes, so a restored choice does not reach them by itself
     onGeneralCheckboxClicked();

@@ -2951,6 +2951,11 @@ Créer l'ISO malgré tout ?</translation>
         <translation>Premier fichier M2TS</translation>
     </message>
     <message>
+        <location filename="../tsmuxerwindow.ui" line="1631"/>
+        <source>Number of the first clip (BDMV/STREAM/00001.m2ts). 1 by default: a clip with the same number as the playlist (00000.mpls and 00000.m2ts) makes some media managers, such as tinyMediaManager, read the playlist instead of the film, so they find no video or codecs in the ISO.</source>
+        <translation>Numéro du premier clip (BDMV/STREAM/00001.m2ts). 1 par défaut : un clip qui porte le même numéro que la playlist (00000.mpls et 00000.m2ts) amène certains gestionnaires de médias, comme tinyMediaManager, à lire la playlist au lieu du film ; ils ne trouvent alors ni la vidéo ni les codecs de l&apos;ISO.</translation>
+    </message>
+    <message>
         <location filename="../tsmuxerwindow.ui" line="1438"/>
         <source>Start mux time</source>
         <translation>Heure de démarrage du muxage</translation>

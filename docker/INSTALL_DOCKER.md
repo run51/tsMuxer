@@ -118,6 +118,9 @@ Open `http://<host>:5800` in a browser.
 - **Output name**: with "Use the input file name for the output" ticked, the output takes the
   name of the source file, of the ISO, or of the disc folder for a Blu-ray folder; **Browse**
   then asks only for the output folder.
+- **First M2TS file** (Blu-ray tab) is 1 by default, so the film is `00001.m2ts` beside the
+  playlist `00000.mpls`. With both at `00000`, tinyMediaManager reads the playlist of an ISO
+  instead of the film and finds no video or codecs.
 - **Estimated size** (right of the output types): from the ticked tracks, with the disc it
   fits on (BD-25, 50, 66 or 100). Available for MKV sources (mkvmerge, MakeMKV…).
 - **The queue is kept** in `/config`: after a restart of the container or the host, the pending

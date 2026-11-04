@@ -1628,8 +1628,14 @@
                  <verstretch>0</verstretch>
                 </sizepolicy>
                </property>
+               <property name="toolTip">
+                <string>Number of the first clip (BDMV/STREAM/00001.m2ts). 1 by default: a clip with the same number as the playlist (00000.mpls and 00000.m2ts) makes some media managers, such as tinyMediaManager, read the playlist instead of the film, so they find no video or codecs in the ISO.</string>
+               </property>
                <property name="maximum">
                 <number>99999</number>
+               </property>
+               <property name="value">
+                <number>1</number>
                </property>
               </widget>
              </item>
