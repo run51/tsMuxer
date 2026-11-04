@@ -1,5 +1,6 @@
-# Synology Container Manager project (DSM 7.2): Container Manager > Project >
-# Create, then paste this file. Adjust the paths and USER_ID/GROUP_ID.
+# Docker Compose file for tsMuxeR (see INSTALL_DOCKER.md). Adjust the paths, USER_ID/GROUP_ID
+# and TZ, then: docker compose up -d. On a Synology NAS: Container Manager > Project > Create,
+# then paste this file.
 services:
   tsmuxer:
     image: tsmuxer-dv:latest
