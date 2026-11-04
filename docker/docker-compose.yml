@@ -13,7 +13,9 @@ services:
       USER_ID: "1026"          # id of your DSM user (ssh: id <user>)
       GROUP_ID: "100"          # "users" group on DSM
       UMASK: "0002"            # created files readable by everyone, writable by the group
-      TZ: "Europe/Paris"
+      TZ: "Europe/London"      # your time zone
+      # TSMUXER_LANGUAGE: "fr"   # French interface (read on the first start; English by default)
+      # LANG: "fr_FR.UTF-8"      # French number formats
       KEEP_APP_RUNNING: "1"    # restart tsMuxeR if its window is closed
       DARK_MODE: "1"           # dark theme for tsMuxeR and MediaInfo ("0" = light)
       DISPLAY_WIDTH: "1600"

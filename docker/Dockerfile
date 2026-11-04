@@ -48,7 +48,7 @@ RUN printf 'root:x:0:\nstaff:x:50:\nusers:x:100:\nnogroup:x:65534:\n' > /tmp/.gr
         dbus-x11 mediainfo-gui \
         fonts-liberation fonts-dejavu-core \
         locales \
-    && sed -i 's/^# *\(fr_FR.UTF-8\)/\1/' /etc/locale.gen && locale-gen \
+    && sed -i -e 's/^# *\(en_US.UTF-8\)/\1/' -e 's/^# *\(fr_FR.UTF-8\)/\1/' /etc/locale.gen && locale-gen \
     && rm -rf /var/lib/apt/lists/* /tmp/.group /tmp/.passwd /tmp/.shadow /config/log
 
 COPY --from=build /build/tsMuxerGUI/tsMuxeR /usr/bin/tsMuxeR
@@ -59,9 +59,9 @@ RUN chmod +x /startapp.sh \
     && set-cont-env APP_NAME "tsMuxeR" \
     && set-cont-env APP_VERSION "dv"
 
-# UTF-8 locale so accented file names on the NAS are handled correctly
-ENV LANG=fr_FR.UTF-8 \
-    LC_ALL=fr_FR.UTF-8
+# UTF-8 locale so accented file names on the NAS are handled correctly. fr_FR.UTF-8 is installed too, for French
+# number formats (LANG in the docker-compose).
+ENV LANG=en_US.UTF-8
 
 # /config: settings of tsMuxeR and MediaInfo; /storage: the NAS video shares
 VOLUME ["/config", "/storage"]
