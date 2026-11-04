@@ -3,6 +3,7 @@ project(mediation)
 
 add_library(mediation STATIC
   types/types.cpp
+  fs/isofs.cpp
   system/terminatablethread.cpp
 )
 

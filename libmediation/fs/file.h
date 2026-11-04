@@ -146,6 +146,7 @@ class File : public AbstractOutputStream
 
    private:
     void* m_impl;
+    void* m_iso = nullptr;  // a file inside a disc image (isofs), read in place
     std::string m_name;
     mutable int64_t m_pos;
 };

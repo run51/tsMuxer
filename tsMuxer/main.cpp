@@ -10,8 +10,10 @@
 #include <set>
 #include <sstream>
 #include <vector>
+#include <filesystem>
 
 #include <climits>
+#include <cstring>
 #include <cmath>
 #include "bdSsifImport.h"
 #include "blank_patterns.h"
@@ -20,6 +22,7 @@
 #include "convertUTF.h"
 #include "h264StreamReader.h"
 #include "iso_writer.h"
+#include "matroskaDemuxer.h"
 #include "matroskaMuxer.h"
 #include "metaDemuxer.h"
 #include "mpegStreamReader.h"
@@ -286,6 +289,31 @@ void detectStreamReader(const char* fileName, MPLSParser* mplsParser, bool isSub
     const std::string nameLang = langFromFileName(fileName);
     const int64_t nameDelay = delayFromFileName(fileName);
 
+    // The size of each track of a Matroska file, from the statistics its writer leaves, so the window can estimate
+    // the size of an output made of some of them before it is muxed.
+    std::map<int, uint64_t> trackBytes;
+    {
+        const std::string ext = strToLowerCase(extractFileExt(fileName));
+        if (ext == "mkv" || ext == "mka" || ext == "mk3d" || ext == "webm")
+        {
+            try
+            {
+                MatroskaDemuxer mkv(readManager);
+                mkv.openFile(fileName);
+                const std::map<uint64_t, uint64_t> bytes = mkv.getTrackByteCounts();
+                for (const CheckStreamRez& s : streams)
+                {
+                    const auto it = bytes.find(mkv.getTrackUid(s.trackID));
+                    if (s.trackID > 0 && it != bytes.end())
+                        trackBytes[s.trackID] = it->second;
+                }
+            }
+            catch (...)
+            {
+            }
+        }
+    }
+
     for (unsigned i = 0; i < streams.size(); i++)
     {
         if (streams[i].trackID == 0)
@@ -386,6 +414,11 @@ void detectStreamReader(const char* fileName, MPLSParser* mplsParser, bool isSub
                                         : "   3D: dependent view only, both views are in " + ssifPartner;
             LTRACE(LT_INFO, 2, "Stream info: " << descr);
             LTRACE(LT_INFO, 2, "Stream lang: " << streams[i].lang);
+            // the region a three letter code cannot carry: fr-CA and fr-FR are both fra
+            if (!streams[i].langBCP47.empty())
+                LTRACE(LT_INFO, 2, "Stream langtag: " << streams[i].langBCP47);
+            if (const auto bytes = trackBytes.find(streams[i].trackID); bytes != trackBytes.end())
+                LTRACE(LT_INFO, 2, "Stream bytes: " << bytes->second);
             // A Matroska track's name and the flags it has set, under the names the meta takes, so the window can
             // start from them. The name is the file's own text, on one line.
             if (!streams[i].name.empty())
@@ -1256,6 +1289,265 @@ static bool writeSsifGroup(IsoWriter* iso, const string& srcRoot, const BdSsifGr
     // NOTE THE ORDER. createInterleavedFile emits inFile2's piece before inFile1's, so passing
     // (base, dep) is what puts the dependent chunk first and matches the disc.
     return iso->createInterleavedFile(g.baseRel, g.depRel, g.ssifRel);
+}
+
+// True when a clip is still under AACS: an aligned unit of 32 source packets leaves only its first 16 bytes in the
+// clear, so the sync byte of every packet after the first is gone.
+static bool clipLooksEncrypted(const string& clipPath)
+{
+    File clip;
+    if (!clip.open(clipPath.c_str(), File::ofRead))
+        return false;
+    std::vector<uint8_t> unit(6144);
+    if (clip.read(unit.data(), 6144) != 6144)
+        return false;
+    int sync = 0;
+    for (int k = 1; k < 32; ++k) sync += unit[4 + 192 * k] == 0x47;
+    return sync < 16;
+}
+
+// The playlists of a Blu-ray disc image, longest first, one "Playlist: <seconds> <clips> <path>" line each, for
+// the GUI to choose from. The image is read in place (libmediation/fs/isofs.h), so each path printed is an input
+// file as it stands. "Encrypted: 1" follows when the clips are still under AACS: the image is a copy of the disc
+// as sold, not a decrypted backup, and nothing in it can be muxed.
+static int listIsoPlaylists(const int argc, char** argv)
+{
+    if (argc != 3)
+    {
+        LTRACE(LT_ERROR, 2, "Usage: tsMuxeR --iso-playlists <image.iso>");
+        return 1;
+    }
+    const string image = argv[2];
+    const string playlistDir = image + "/BDMV/PLAYLIST/";
+    vector<string> names;
+    if (!findFiles(playlistDir, "*.mpls", &names, false) || names.empty())
+    {
+        LTRACE(LT_ERROR, 2, "Error: no Blu-ray playlist in " << image);
+        return 2;
+    }
+    // the same order on every system, so that of two playlists of one length the lower number comes first
+    std::sort(names.begin(), names.end());
+    struct Playlist
+    {
+        double seconds;
+        size_t clips;
+        string path;
+        string firstClip;
+    };
+    vector<Playlist> playlists;
+    for (const string& name : names)
+    {
+        MPLSParser parser;
+        const string path = playlistDir + name;
+        try
+        {
+            if (!parser.parse(path.c_str()))
+                continue;
+        }
+        catch (...)
+        {
+            continue;
+        }
+        double seconds = 0;
+        for (const MPLSPlayItem& item : parser.m_playItems) seconds += (item.OUT_time - item.IN_time) / 45000.0;
+        playlists.push_back(
+            {seconds, parser.m_playItems.size(), path, parser.m_playItems.empty() ? "" : parser.m_playItems[0].fileName});
+    }
+    std::stable_sort(playlists.begin(), playlists.end(),
+                     [](const Playlist& a, const Playlist& b) { return a.seconds > b.seconds; });
+    for (const Playlist& pl : playlists)
+        LTRACE(LT_INFO, 2, "Playlist: " << std::fixed << std::setprecision(3) << pl.seconds << " " << pl.clips << " "
+                                        << pl.path);
+
+    // "Authored by: tsMuxeR" for an image this program wrote, read from the implementation identifier of the
+    // logical volume descriptor (iso_writer.cpp puts "*tsMuxeR" there). A folder scan uses it to leave out the
+    // discs made by an earlier conversion, which sit beside their sources.
+    {
+        File img;
+        uint8_t sector[2048];
+        if (img.open(image.c_str(), File::ofRead) && img.seek(256 * 2048) == 256 * 2048 &&
+            img.read(sector, 2048) == 2048 && (sector[0] | sector[1] << 8) == 2)
+        {
+            const uint32_t vdsLoc = sector[20] | sector[21] << 8 | sector[22] << 16 | sector[23] << 24;
+            for (uint32_t i = 0; i < 16; ++i)
+            {
+                const auto at = static_cast<int64_t>(vdsLoc + i) * 2048;
+                if (img.seek(at) != at || img.read(sector, 2048) != 2048)
+                    break;
+                const int tag = sector[0] | sector[1] << 8;
+                if (tag == 8)
+                    break;
+                if (tag == 6)
+                {
+                    if (std::memcmp(sector + 273, "*tsMuxeR", 8) == 0)
+                        LTRACE(LT_INFO, 2, "Authored by: tsMuxeR");
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!playlists.empty() && !playlists[0].firstClip.empty() &&
+        clipLooksEncrypted(image + "/BDMV/STREAM/" + playlists[0].firstClip + ".m2ts"))
+        LTRACE(LT_INFO, 2, "Encrypted: 1");
+    return 0;
+}
+
+// Everything the disc explorer of the window shows about a Blu-ray, a folder holding BDMV or a disc image: for each
+// playlist, longest first, its duration, clips, size, chapters and angles, then its clips and the streams its
+// STN table declares, read from the playlist without opening the clips. Fields are separated by '|':
+//   Disc playlist: name|seconds|clips|bytes|chapters|angles|flags     flags: "3d", "dv", comma separated
+//   Disc clip: playlist|clip|seconds|bytes
+//   Disc stream: playlist|pid|kind|codec|lang|details                kind: V, A, S or O
+static int discInfo(const int argc, char** argv)
+{
+    if (argc != 3)
+    {
+        LTRACE(LT_ERROR, 2, "Usage: tsMuxeR --disc-info <disc folder or image.iso>");
+        return 1;
+    }
+    string root = argv[2];
+    while (!root.empty() && (root.back() == '/' || root.back() == '\\')) root.pop_back();
+    const string playlistDir = root + "/BDMV/PLAYLIST/";
+    const string streamDir = root + "/BDMV/STREAM/";
+    vector<string> names;
+    if (!findFiles(playlistDir, "*.mpls", &names, false) || names.empty())
+    {
+        LTRACE(LT_ERROR, 2, "Error: no Blu-ray playlist in " << root);
+        return 2;
+    }
+    // the same order on every system, so that of two playlists of one length the lower number comes first
+    std::sort(names.begin(), names.end());
+    const auto codecName = [](const StreamType t) -> std::pair<char, string>
+    {
+        switch (t)
+        {
+        case StreamType::VIDEO_MPEG2:
+            return {'V', "MPEG-2"};
+        case StreamType::VIDEO_H264:
+            return {'V', "H.264"};
+        case StreamType::VIDEO_MVC:
+            return {'V', "MVC"};
+        case StreamType::VIDEO_H265:
+            return {'V', "HEVC"};
+        case StreamType::VIDEO_VC1:
+            return {'V', "VC-1"};
+        case StreamType::AUDIO_LPCM:
+            return {'A', "LPCM"};
+        case StreamType::AUDIO_AC3:
+            return {'A', "AC3"};
+        case StreamType::AUDIO_DTS:
+            return {'A', "DTS"};
+        case StreamType::AUDIO_TRUE_HD:
+            return {'A', "TRUE-HD"};
+        case StreamType::AUDIO_EAC3:
+            return {'A', "E-AC3"};
+        case StreamType::AUDIO_DTS_HD:
+            return {'A', "DTS-HD"};
+        case StreamType::AUDIO_DTS_HD_MA:
+            return {'A', "DTS-HD MA"};
+        case StreamType::AUDIO_EAC3_SECONDARY:
+            return {'A', "E-AC3 (secondary)"};
+        case StreamType::AUDIO_DTS_HD_SECONDARY:
+            return {'A', "DTS-HD (secondary)"};
+        case StreamType::SUB_PGS:
+            return {'S', "PGS"};
+        case StreamType::SUB_IGS:
+            return {'O', "IG (menu)"};
+        case StreamType::SUB_TGS:
+            return {'S', "Text"};
+        default:
+            return {'O', "type 0x" + int32uToHex(static_cast<uint32_t>(t))};
+        }
+    };
+    const auto videoFormat = [](const uint8_t f) -> string
+    {
+        static const char* const formats[] = {"", "480i", "576i", "480p", "1080i", "720p", "1080p", "576p", "2160p"};
+        return f < 9 ? formats[f] : "";
+    };
+    const auto channels = [](const uint8_t p) -> string
+    {
+        switch (p)
+        {
+        case 1:
+            return "mono";
+        case 3:
+            return "stereo";
+        case 6:
+            return "multi-channel";
+        case 12:
+            return "stereo + multi-channel";
+        default:
+            return "";
+        }
+    };
+
+    struct Playlist
+    {
+        double seconds = 0;
+        string name;
+        MPLSParser parser;
+        uint64_t bytes = 0;
+    };
+    vector<Playlist> playlists;
+    for (const string& name : names)
+    {
+        Playlist pl;
+        pl.name = name;
+        try
+        {
+            if (!pl.parser.parse((playlistDir + name).c_str()))
+                continue;
+        }
+        catch (...)
+        {
+            continue;
+        }
+        for (const MPLSPlayItem& item : pl.parser.m_playItems)
+        {
+            pl.seconds += (item.OUT_time - item.IN_time) / 45000.0;
+            pl.bytes += getFileSize(streamDir + item.fileName + ".m2ts");
+        }
+        playlists.push_back(std::move(pl));
+    }
+    std::stable_sort(playlists.begin(), playlists.end(),
+                     [](const Playlist& a, const Playlist& b) { return a.seconds > b.seconds; });
+    for (const Playlist& pl : playlists)
+    {
+        const MPLSParser& p = pl.parser;
+        string flags;
+        if (p.isDependStreamExist)
+            flags += "3d";
+        if (p.number_of_DolbyVision_video_stream_entries > 0)
+            flags += flags.empty() ? "dv" : ",dv";
+        LTRACE(LT_INFO, 2,
+               "Disc playlist: " << pl.name << '|' << std::fixed << std::setprecision(3) << pl.seconds << '|'
+                                 << p.m_playItems.size() << '|' << pl.bytes << '|' << p.m_marks.size() << '|'
+                                 << std::max<int>(1, p.number_of_angles) << '|' << flags);
+        for (const MPLSPlayItem& item : p.m_playItems)
+            LTRACE(LT_INFO, 2,
+                   "Disc clip: " << pl.name << '|' << item.fileName << ".m2ts|" << std::fixed << std::setprecision(3)
+                                 << (item.OUT_time - item.IN_time) / 45000.0 << '|'
+                                 << getFileSize(streamDir + item.fileName + ".m2ts"));
+        for (const MPLSStreamInfo& s : p.m_streamInfo)
+        {
+            const auto [kind, codec] = codecName(s.stream_coding_type);
+            string details;
+            if (kind == 'V')
+                details = videoFormat(s.video_format);
+            else if (kind == 'A')
+                details = channels(s.audio_presentation_type);
+            if (s.isSecondary)
+                details += details.empty() ? "secondary" : ", secondary";
+            LTRACE(LT_INFO, 2,
+                   "Disc stream: " << pl.name << '|' << s.streamPID << '|' << kind << '|' << codec << '|'
+                                   << string(s.language_code, strnlen(s.language_code, 3)) << '|' << details);
+        }
+    }
+    if (!playlists.empty() && !playlists[0].parser.m_playItems.empty() &&
+        clipLooksEncrypted(streamDir + playlists[0].parser.m_playItems[0].fileName + ".m2ts"))
+        LTRACE(LT_INFO, 2, "Encrypted: 1");
+    return 0;
 }
 
 static int bdmvFolderToGuardedIso(const int argc, char** argv)
@@ -2210,7 +2502,13 @@ static void reportLostData(const MuxerManager& muxerManager)
     LTRACE(LT_WARN, 2, why + advice);
 }
 
+#ifdef TSMUXER_UNIFIED
+// In the unified executable, main() lives in the GUI and dispatches here for
+// command line use. The GUI marks engine invocations with --engine.
+int tsmuxerEngineMain(int argc, char** argv)
+#else
 int main(int argc, char** argv)
+#endif
 {
 #ifdef _WIN32
     auto argvWide = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -2221,6 +2519,11 @@ int main(int argc, char** argv)
         argv_utf8.emplace_back(toUtf8(argvWide[i]));
     }
     LocalFree(argvWide);
+#ifdef TSMUXER_UNIFIED
+    if (argv_utf8.size() > 1 && argv_utf8[1] == "--engine")
+        argv_utf8.erase(argv_utf8.begin() + 1);
+    argc = static_cast<int>(argv_utf8.size());
+#endif
     std::vector<char*> argv_vec;
     argv_vec.reserve(argv_utf8.size());
     for (auto&& s : argv_utf8)
@@ -2228,6 +2531,13 @@ int main(int argc, char** argv)
         argv_vec.push_back(s.data());
     }
     argv = argv_vec.data();
+#elif defined(TSMUXER_UNIFIED)
+    if (argc > 1 && std::string(argv[1]) == "--engine")
+    {
+        argv[1] = argv[0];
+        --argc;
+        ++argv;
+    }
 #endif
     LTRACE(LT_INFO, 2, "tsMuxeR version " TSMUXER_VERSION << ". github.com/teaching-droid/tsMuxer");
 
@@ -2292,6 +2602,10 @@ int main(int argc, char** argv)
         // instead of saying what the mode expects.
         if (argc >= 2 && string(argv[1]) == "--bdmv-to-iso")
             return bdmvFolderToGuardedIso(argc, argv);
+        if (argc >= 2 && string(argv[1]) == "--iso-playlists")
+            return listIsoPlaylists(argc, argv);
+        if (argc >= 2 && string(argv[1]) == "--disc-info")
+            return discInfo(argc, argv);
         if (argc == 2)
         {
             string str = argv[1];
@@ -2574,7 +2888,17 @@ int main(int argc, char** argv)
                 blurayHelper.createBluRayDirs();
                 dstFile = blurayHelper.m2tsFileName(firstM2tsOffset);
             }
+            LTRACE(LT_INFO, 2, "Muxing streams");
             muxerManager.doMux(dstFile, dt != DiskType::NONE ? &blurayHelper : nullptr);
+            if (const auto muxer = dynamic_cast<TSMuxer*>(muxerManager.getMainMuxer()))
+            {
+                const auto firstPts = muxer->getFirstPts();
+                const auto lastPts = muxer->getLastPts();
+                if (!firstPts.empty() && !lastPts.empty() && lastPts.back() > firstPts.front())
+                    LTRACE(LT_INFO, 2,
+                           "Muxed duration: " << floatToTime(static_cast<double>(lastPts.back() - firstPts.front()) /
+                                                             90000.0));
+            }
             if (dt != DiskType::NONE)
             {
                 blurayHelper.writeBluRayFiles(muxerManager, insertBlankPL, firstMplsOffset, blankNum, stereoMode);
@@ -2622,7 +2946,13 @@ int main(int argc, char** argv)
                 {
                     blankPlaylistClash(*mainMuxer, blankNum);
                     LTRACE(LT_INFO, 2, "Adding blank play list");
-                    muxBlankPL(extractFileDir(argv[0]), blurayHelper, mainMuxer->getPidList(), dt, blankNum);
+                    // the blank stream is a temporary file: write it to the temp folder, the program's own folder
+                    // may be read-only (/usr/bin in the Docker image, Program Files on Windows)
+                    const auto tempDir = std::filesystem::temp_directory_path().u8string();
+                    std::string blankDir(reinterpret_cast<const char*>(tempDir.c_str()), tempDir.size());
+                    if (!blankDir.empty() && blankDir.back() != '/' && blankDir.back() != '\\')
+                        blankDir += '/';
+                    muxBlankPL(blankDir, blurayHelper, mainMuxer->getPidList(), dt, blankNum);
                 }
             }
             // An image is finished here, before success is reported: finishing can still refuse, when its metadata

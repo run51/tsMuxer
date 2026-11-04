@@ -4,6 +4,7 @@
 #include "../directory_priv.h"
 
 #include "../file.h"
+#include "../isofs.h"
 
 using namespace std;
 
@@ -74,6 +75,8 @@ bool deleteFile(const string& fileName)
 
 bool findFiles(const string& path, const string& fileMask, vector<string>* fileList, const bool savePaths)
 {
+    if (isofs::isInside(path))
+        return isofs::findFiles(path, fileMask, fileList, savePaths, false);
     WIN32_FIND_DATA fileData;  // Data structure describes the file found
     // Search handle returned by FindFirstFile
 
@@ -128,6 +131,8 @@ bool findDirs(const string& path, vector<string>* dirsList)
 
 bool findFilesRecursive(const string& path, const string& mask, vector<string>* const fileList)
 {
+    if (isofs::isInside(path))
+        return isofs::findFiles(path, mask, fileList, true, true);
     recurseDirectorySearch(findFiles, findDirs, path, mask, fileList);
     return true;
 }

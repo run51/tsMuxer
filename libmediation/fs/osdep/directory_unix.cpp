@@ -2,6 +2,7 @@
 
 #include "../directory.h"
 #include "../directory_priv.h"
+#include "../isofs.h"
 
 #include <dirent.h>
 #include <fnmatch.h>
@@ -9,6 +10,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <set>
 #include <utility>
 
@@ -26,12 +28,16 @@ string extractFileDir(const string& fileName)
 
 bool fileExists(const string& fileName)
 {
+    if (isofs::isInside(fileName))
+        return isofs::exists(fileName);
     struct stat buf;
     return stat(fileName.c_str(), &buf) == 0;
 }
 
 uint64_t getFileSize(const std::string& fileName)
 {
+    if (isofs::isInside(fileName))
+        return static_cast<uint64_t>(std::max<int64_t>(isofs::fileSize(fileName), 0));
     struct stat fileStat;
     auto res = stat(fileName.c_str(), &fileStat) == 0;
     return res ? static_cast<uint64_t>(fileStat.st_size) : 0;
@@ -77,6 +83,8 @@ static bool isEntryOfKind(const string& fullName, const dirent* entry, const boo
 
 bool findFiles(const string& path, const string& fileMask, vector<string>* fileList, bool savePaths)
 {
+    if (isofs::isInside(path))
+        return isofs::findFiles(path, fileMask, fileList, savePaths, false);
     dirent** namelist;
 
     int n = scandir(path.c_str(), &namelist, 0, 0);  // alphasort);
@@ -152,6 +160,8 @@ static void findFilesOnce(const string& path, const string& mask, vector<string>
 
 bool findFilesRecursive(const string& path, const string& mask, vector<string>* const fileList)
 {
+    if (isofs::isInside(path))
+        return isofs::findFiles(path, mask, fileList, true, true);
     std::set<std::pair<dev_t, ino_t>> visited;
     findFilesOnce(path, mask, fileList, visited);
     return true;

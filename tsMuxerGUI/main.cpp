@@ -7,6 +7,10 @@
 #include "systemcolours.h"
 #include "tsmuxerwindow.h"
 
+#ifdef TSMUXER_UNIFIED
+#include "unifiedLauncher.h"
+#endif
+
 // The window kept its settings under the name of the company the original program came from: on Windows the registry
 // key HKEY_CURRENT_USER/Software/Network Optix/tsMuxeR. They are kept under tsMuxeR now. On the first start under the
 // new name the old settings are copied over once, so nothing chosen before is lost; the old place is left as it is,
@@ -27,6 +31,17 @@ static void copySettingsFromOldName()
 
 int main(int argc, char* argv[])
 {
+#ifdef TSMUXER_UNIFIED
+    if (unifiedShouldRunEngine(argc, argv))
+        return unifiedRunEngine(argc, argv);
+    if (argc > 1 && QString::fromLocal8Bit(argv[1]) == "--gui")
+    {
+        // drop --gui but keep the program name in argv[0]
+        argv[1] = argv[0];
+        --argc;
+        ++argv;
+    }
+#endif
     QApplication app(argc, argv);
     app.setOrganizationName("tsMuxeR");
     app.setApplicationName("tsMuxeR");

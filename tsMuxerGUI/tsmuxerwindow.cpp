@@ -8,6 +8,8 @@
 
 #include "tsmuxerwindow.h"
 
+#include "discExplorer.h"
+
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -15,12 +17,14 @@
 #include <QDesktopServices>
 #include <QDir>
 #include <QDirIterator>
+#include <QDirIterator>
 #include <QDropEvent>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFontDialog>
 #include <QGridLayout>
 #include <QGroupBox>
+#include <QInputDialog>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -29,7 +33,9 @@
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
+#include <QMenu>
 #include <QMessageBox>
+#include <QProgressDialog>
 #include <QMimeData>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -40,13 +46,18 @@
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QToolButton>
 #include <QStandardPaths>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QSplitter>
 #include <QStorageInfo>
 #include <QTabWidget>
 #include <QTemporaryFile>
 #include <QTime>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <algorithm>
 #include <unordered_set>
 
@@ -55,6 +66,8 @@
 #include "fontsettingstablemodel.h"
 #include "lang_codes.h"
 #include "muxForm.h"
+#include "muxQueue.h"
+#include "tsMuxerProcess.h"
 
 namespace QtCompat
 {
@@ -180,7 +193,7 @@ QString fileDialogFilter()
          {"ac3",  "ddp", "ec3",  "eac3",  "aac",   "avc", "mvc",    "264", "h264", "hevc", "265",  "h265",
           "obu",  "ivf", "dts",  "dtshd", "dtsma", "thd", "truehd", "mpv", "m1v",  "m2v",  "mpa",  "ts",
           "m2ts", "mts", "ssif", "mpg",   "mpeg",  "vob", "evo",    "mkv", "mka",  "mks",  "mk3d", "webm",
-          "mp4",  "m4a", "m4v",  "mov",   "mpls",  "mpl", "sup",    "srt", "wav",  "w64",  "pcm"}},
+          "mp4",  "m4a", "m4v",  "mov",   "mpls",  "mpl", "iso",    "sup", "srt",  "wav",  "w64", "pcm"}},
         {TsMuxerWindow::tr("Container files (TS, MKV, MP4, MOV, etc.)"),
          {"ts", "m2ts", "mts", "ssif", "mpg", "mpeg", "vob", "evo", "mkv", "mka", "mks", "mk3d", "webm", "mp4", "m4a",
           "m4v", "mov"}},
@@ -189,14 +202,15 @@ QString fileDialogFilter()
         {TsMuxerWindow::tr("Audio files"),
          {"ac3", "ddp", "ec3", "eac3", "aac", "dts", "dtshd", "dtsma", "thd", "truehd", "mpa", "wav", "w64", "pcm"}},
         {TsMuxerWindow::tr("Subtitle files"), {"sup", "srt"}},
-        {TsMuxerWindow::tr("Blu-ray playlist"), {"mpls", "mpl"}}};
+        {TsMuxerWindow::tr("Blu-ray playlist"), {"mpls", "mpl"}},
+                             {TsMuxerWindow::tr("Blu-ray disc image"), {"iso"}}};
 #else
     FileFilterVec filters = {{TsMuxerWindow::tr("All supported media files"),
                               {"ac3",     "ddp",  "ec3",  "eac3", "aac", "avc",   "mvc",   "264",  "h264",   "hevc",
                                "265",     "h265", "obu",  "ivf",  "dts", "dtshd", "dtsma", "thd",  "truehd", "ac3+thd",
                                "thd+ac3", "mpv",  "m1v",  "m2v",  "mpa", "ts",    "m2ts",  "mts",  "ssif",   "mpg",
                                "mpeg",    "vob",  "evo",  "mkv",  "mka", "mks",   "mk3d",  "webm", "mp4",    "m4a",
-                               "m4v",     "mov",  "mpls", "mpl",  "sup", "srt",   "wav",   "w64",  "pcm"}},
+                               "m4v",     "mov",  "mpls", "mpl",  "iso", "sup",   "srt",   "wav",  "w64",    "pcm"}},
                              {TsMuxerWindow::tr("Container files (TS, MKV, MP4, MOV, etc.)"),
                               {"ts", "m2ts", "mts", "ssif", "mpg", "mpeg", "vob", "evo", "mkv", "mka", "mks", "mk3d",
                                "webm", "mp4", "m4a", "m4v", "mov"}},
@@ -206,9 +220,110 @@ QString fileDialogFilter()
                               {"ac3", "ddp", "ec3", "eac3", "aac", "dts", "dtshd", "dtsma", "thd", "truehd", "ac3+thd",
                                "thd+ac3", "mpa", "wav", "w64", "pcm"}},
                              {TsMuxerWindow::tr("Subtitle files"), {"sup", "srt"}},
-                             {TsMuxerWindow::tr("Blu-ray playlist"), {"mpls", "mpl"}}};
+                             {TsMuxerWindow::tr("Blu-ray playlist"), {"mpls", "mpl"}},
+                             {TsMuxerWindow::tr("Blu-ray disc image"), {"iso"}}};
 #endif
     return makeFileFilter(filters);
+}
+
+// The disc image a path runs through: "D:\films\movie.iso" for "D:\films\movie.iso\BDMV\PLAYLIST\00800.mpls",
+// a playlist the engine reads inside the image without mounting it. Empty for any other path.
+static QString discImageOf(const QString& path)
+{
+    for (int i = 5; i < path.size(); ++i)
+        if ((path[i] == '/' || path[i] == '\\') && path.left(i).endsWith(QLatin1String(".iso"), Qt::CaseInsensitive) &&
+            QFileInfo(path.left(i)).isFile())
+            return path.left(i);
+    return QString();
+}
+
+// The disc a source belongs to, as the explorer takes it: the image, or the folder holding BDMV. Empty for a file
+// that is not part of a Blu-ray.
+static QString discRootOf(const QString& path)
+{
+    const QString image = discImageOf(path);
+    if (!image.isEmpty())
+        return image;
+    if (path.endsWith(QLatin1String(".iso"), Qt::CaseInsensitive) && QFileInfo(path).isFile())
+        return path;
+    const QString p = QDir::fromNativeSeparators(path);
+    const int bdmv = p.lastIndexOf(QLatin1String("/BDMV/"), -1, Qt::CaseInsensitive);
+    if (bdmv > 0)
+        return QDir::toNativeSeparators(p.left(bdmv));
+    if (p.endsWith(QLatin1String("/BDMV"), Qt::CaseInsensitive))
+        return QDir::toNativeSeparators(p.left(p.size() - 5));
+    if (QFileInfo(p + "/BDMV").isDir())
+        return QDir::toNativeSeparators(p);
+    return QString();
+}
+
+// The file a source stands for, the one named after and shown in a folder: the image for a playlist inside one.
+static QString sourceFileOf(const QString& path)
+{
+    const QString image = discImageOf(path);
+    return image.isEmpty() ? path : image;
+}
+
+// A scroll area that gives way in height only: at the least as wide as what it holds and its scroll bar, so nothing
+// is cut off on the right, and three lines high. Capped, it is no taller than what it holds, whose height changes
+// with the groups shown for each output.
+class VerticalScrollArea : public QScrollArea
+{
+   public:
+    using QScrollArea::QScrollArea;
+    QSize minimumSizeHint() const override
+    {
+        const int width = widget() ? widget()->minimumSizeHint().width() : 0;
+        return {width + verticalScrollBar()->sizeHint().width() + 2 * frameWidth(), fontMetrics().height() * 3};
+    }
+    void setCapped(const bool capped)
+    {
+        m_capped = capped;
+        fitHeight();
+        updateGeometry();
+    }
+
+   protected:
+    bool eventFilter(QObject* o, QEvent* e) override
+    {
+        if (o == widget() && e->type() == QEvent::LayoutRequest)
+            QTimer::singleShot(0, this,
+                               [this]
+                               {
+                                   fitHeight();
+                                   updateGeometry();  // the window widens with what it holds
+                               });
+        return QScrollArea::eventFilter(o, e);
+    }
+
+   private:
+    void fitHeight()
+    {
+        if (widget())
+            setMaximumHeight(m_capped ? widget()->sizeHint().height() + 2 * frameWidth() : QWIDGETSIZE_MAX);
+    }
+    bool m_capped = false;
+};
+
+// The name an output takes from its source. A playlist or clip of a Blu-ray takes the disc's, the image's or that of
+// the folder holding BDMV ("Iron Man 3" rather than "00800"); a disc mounted as a drive gives its volume label.
+static QString outputBaseNameOf(const QString& path)
+{
+    const QString root = discRootOf(path);
+    if (root.isEmpty() || QFileInfo(root).isFile())
+        return QFileInfo(sourceFileOf(path)).completeBaseName();
+    QString name = QDir(root).dirName();
+    if (name.isEmpty())
+        name = QStorageInfo(root).name().trimmed();
+    return name.isEmpty() ? QFileInfo(path).completeBaseName() : name;
+}
+
+// The folder a source lies in, where "output in the input folder" writes: beside the image or the disc's folder, not
+// in its BDMV\PLAYLIST.
+static QString sourceDirOf(const QString& path)
+{
+    const QString root = discRootOf(path);
+    return QFileInfo(root.isEmpty() ? path : root).absolutePath();
 }
 
 QString TI_DEFAULT_TAB_NAME() { return TsMuxerWindow::tr("General track options"); }
@@ -647,6 +762,7 @@ TsMuxerWindow::TsMuxerWindow()
       outFileNameModified(false),
       outFileNameDisableChange(false),
       muxForm(new MuxForm(this)),
+      muxQueue(new MuxQueue(this)),
       m_updateMeta(true),
       m_3dMode(false),
       m_fileDialogOpen(false),
@@ -757,6 +873,13 @@ TsMuxerWindow::TsMuxerWindow()
     connect(ui->trackLV, &QTableWidget::itemChanged, this, &TsMuxerWindow::trackLVItemChanged);
     connect(ui->inputFilesLV, &QListWidget::currentRowChanged, this, &TsMuxerWindow::inputFilesLVChanged);
     connect(ui->addBtn, &QPushButton::clicked, this, &TsMuxerWindow::onAddBtnClick);
+    connect(ui->addFolderBtn, &QPushButton::clicked, this, &TsMuxerWindow::onAddFolderBtnClick);
+    ui->inputFilesLV->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(ui->inputFilesLV, &QWidget::customContextMenuRequested, this, &TsMuxerWindow::onInputFilesContextMenu);
+    connect(ui->checkBoxOutputNameFromInput, &QAbstractButton::toggled, this, [this] {
+        onSavedParamChanged();
+        applyInputNameToOutput();
+    });
     connect(ui->btnAppend, &QPushButton::clicked, this, &TsMuxerWindow::onAppendButtonClick);
     connect(ui->removeFile, &QPushButton::clicked, this, &TsMuxerWindow::onRemoveBtnClick);
     connect(ui->removeTrackBtn, &QPushButton::clicked, this, &TsMuxerWindow::onRemoveTrackButtonClick);
@@ -897,6 +1020,9 @@ TsMuxerWindow::TsMuxerWindow()
     connect(ui->btnBrowse, &QAbstractButton::clicked, this, &TsMuxerWindow::saveFileDialog);
     connect(ui->buttonMux, &QAbstractButton::clicked, this, &TsMuxerWindow::startMuxing);
     connect(ui->buttonSaveMeta, &QAbstractButton::clicked, this, &TsMuxerWindow::saveMetaFileBtnClick);
+    connect(ui->buttonAddToQueue, &QAbstractButton::clicked, this, &TsMuxerWindow::addToQueue);
+    connect(ui->buttonShowQueue, &QAbstractButton::clicked, this, &TsMuxerWindow::showMuxQueue);
+    connect(muxQueue, &MuxQueue::queueFinished, this, &TsMuxerWindow::onQueueFinished);
     connect(ui->buttonOpenMeta, &QAbstractButton::clicked, this, &TsMuxerWindow::openMetaFileBtnClick);
     connect(ui->buttonResetMeta, &QAbstractButton::clicked, this, &TsMuxerWindow::onResetMetaBtnClick);
     connect(ui->memoMeta, &QPlainTextEdit::textChanged, this, &TsMuxerWindow::onMetaTextChanged);
@@ -1993,18 +2119,19 @@ TsMuxerWindow::TsMuxerWindow()
             wrapTip(tr("The Free Sectors above are pre-filled for the selected disc and locked to prevent accidental "
                        "changes. Tick this only if ImgBurn shows a different Free Sectors for your exact disc, then "
                        "type that number. Un-tick to restore the standard value.")));
-        int rr = 0;
-        dl->addWidget(fitLabel, rr, 0);
-        dl->addWidget(discSizeCombo, rr++, 1);
-        dl->addWidget(dlFreeSectorsLabel, rr, 0);
-        dl->addWidget(dlFreeSectorsEdit, rr++, 1);
-        dl->addWidget(dlManualCheck, rr++, 0, 1, 2);
-        dl->addWidget(guardCheck, rr, 0);
-        dl->addWidget(guardSpin, rr++, 1);
-        dl->addWidget(beforeCheck, rr, 0);
-        dl->addWidget(beforeSpin, rr++, 1);
-        dl->addWidget(oversizeCheck, rr++, 0, 1, 2);
-        dl->addWidget(breaksLabel, rr++, 0, 1, 2);
+        // Two pairs of columns, so the group is half as tall: every row it adds is taken from the track list.
+        dl->setVerticalSpacing(4);
+        dl->addWidget(fitLabel, 0, 0);
+        dl->addWidget(discSizeCombo, 0, 1);
+        dl->addWidget(oversizeCheck, 0, 2, 1, 2);
+        dl->addWidget(dlFreeSectorsLabel, 1, 0);
+        dl->addWidget(dlFreeSectorsEdit, 1, 1);
+        dl->addWidget(dlManualCheck, 1, 2, 1, 2);
+        dl->addWidget(guardCheck, 2, 0);
+        dl->addWidget(guardSpin, 2, 1);
+        dl->addWidget(beforeCheck, 2, 2);
+        dl->addWidget(beforeSpin, 2, 3);
+        dl->addWidget(breaksLabel, 3, 0, 1, 4);
 
         // Whatever is in the field wins, so a corrected capacity reaches the break calculation and
         // the muxer rather than only being displayed.
@@ -2259,6 +2386,597 @@ TsMuxerWindow::TsMuxerWindow()
     delete m_seedSettings;  // only read: nothing goes back to the registry
     m_seedSettings = nullptr;
     writeSettings();
+    setupCompactLayout();
+    setupTrackRules();
+    updateSizeEstimate();
+    if (muxQueue->restoredCount() > 0)
+        QTimer::singleShot(0, this, [this] { showMuxQueue(); });
+}
+
+namespace
+{
+// ISO 639-2 codes as the comparison takes them: the terminology code for the bibliographic one (fre and fra are
+// both French), and the two letter code someone may type, "fr, en".
+QString normLang(QString code)
+{
+    code = code.trimmed().toLower();
+    const int dash = code.indexOf('-');
+    if (dash > 0)
+        code = code.left(dash);
+    static const QHash<QString, QString> same = {
+        {"fre", "fra"}, {"ger", "deu"}, {"dut", "nld"}, {"chi", "zho"}, {"cze", "ces"}, {"gre", "ell"},
+        {"per", "fas"}, {"rum", "ron"}, {"slo", "slk"}, {"alb", "sqi"}, {"arm", "hye"}, {"baq", "eus"},
+        {"bur", "mya"}, {"geo", "kat"}, {"ice", "isl"}, {"mac", "mkd"}, {"mao", "mri"}, {"may", "msa"},
+        {"tib", "bod"}, {"wel", "cym"}, {"fr", "fra"},  {"en", "eng"},  {"de", "deu"},  {"es", "spa"},
+        {"it", "ita"},  {"ja", "jpn"},  {"pt", "por"},  {"nl", "nld"},  {"ru", "rus"},  {"zh", "zho"},
+        {"ko", "kor"},  {"sv", "swe"},  {"da", "dan"},  {"no", "nor"},  {"fi", "fin"},  {"pl", "pol"},
+        {"cs", "ces"},  {"hu", "hun"},  {"tr", "tur"},  {"el", "ell"},  {"ar", "ara"},  {"he", "heb"},
+        {"hi", "hin"},  {"th", "tha"}};
+    return same.value(code, code);
+}
+
+// The language a track's name gives, for a file that leaves the track undetermined (und) and says it only there:
+// "French (Canada) : DTS-HD High Resolution Audio 7.1". The word that comes first in the name wins, so "English
+// Commentary" is English and "VFF - French" French. Empty when the name names no language.
+QString langFromTrackName(const QString& name)
+{
+    static const struct
+    {
+        const char* words;
+        const char* code;
+    } languages[] = {{"french|fran[cç]ais|truefrench|vff|vfq|vfi|vf2|vf|qu[eé]b[eé]cois", "fra"},
+                     {"english|anglais", "eng"},
+                     {"german|deutsch|allemand", "deu"},
+                     {"spanish|espa[nñ]ol|espagnol|castellano|latino", "spa"},
+                     {"italian|italiano|italien", "ita"},
+                     {"japanese|japonais", "jpn"},
+                     {"portuguese|portugu[eê]s", "por"},
+                     {"dutch|nederlands|n[eé]erlandais", "nld"},
+                     {"russian|russe", "rus"},
+                     {"chinese|mandarin|cantonese|chinois", "zho"},
+                     {"korean|cor[eé]en", "kor"}};
+    int first = -1;
+    QString code;
+    for (const auto& lang : languages)
+    {
+        const QRegularExpression re(QString("\\b(%1)\\b").arg(lang.words),
+                                    QRegularExpression::CaseInsensitiveOption |
+                                        QRegularExpression::UseUnicodePropertiesOption);
+        const QRegularExpressionMatch m = re.match(name);
+        if (m.hasMatch() && (first < 0 || m.capturedStart() < first))
+        {
+            first = m.capturedStart();
+            code = lang.code;
+        }
+    }
+    return code;
+}
+
+// Which French dub a track is. A BCP 47 tag says it outright; otherwise the name does, as remuxes write it: "French
+// FR (VFF)", "French (Canada)", "TrueFrench", "VFQ". The first of these words in the name wins.
+QString frenchVariant(const QtvCodecInfo& info)
+{
+    if (normLang(info.lang) != QLatin1String("fra"))
+        return QString();
+    const QString tag = info.langTag.toLower();
+    if (tag == QLatin1String("fr-ca"))
+        return QStringLiteral("VFQ");
+    if (tag == QLatin1String("fr-fr"))
+        return QStringLiteral("VFF");
+    static const struct
+    {
+        const char* words;
+        const char* variant;
+    } variants[] = {
+        {"vfq|qu[eé]b[eé]c\\w*|canad\\w*|fr[-_ ]?ca|french\\s*\\(?ca\\)?", "VFQ"},
+        {"vff|truefrench|france|fr[-_ ]?fr|french\\s*\\(?fr\\)?", "VFF"},
+        {"vfi|international", "VFI"},
+    };
+    int first = -1;
+    QString found;
+    for (const auto& v : variants)
+    {
+        const QRegularExpression re(QString("\\b(%1)\\b").arg(v.words),
+                                    QRegularExpression::CaseInsensitiveOption |
+                                        QRegularExpression::UseUnicodePropertiesOption);
+        const QRegularExpressionMatch m = re.match(info.trackName.isEmpty() ? info.srcTrackName : info.trackName);
+        if (m.hasMatch() && (first < 0 || m.capturedStart() < first))
+        {
+            first = m.capturedStart();
+            found = v.variant;
+        }
+    }
+    return found;
+}
+
+// What the language column shows: the code, and for a French track the dub when it is known, "fra (VFQ)".
+QString langCellText(const QtvCodecInfo& info)
+{
+    return info.variant.isEmpty() || normLang(info.lang) != QLatin1String("fra")
+               ? info.lang
+               : QString("%1 (%2)").arg(info.lang, info.variant);
+}
+
+// One entry of a language list: a language, and for French possibly the dub. "vff" and "fr-FR" are French as dubbed
+// in France, "vfq" and "fr-CA" in Quebec, "vfi" international; "fra" or "fr" are any of them.
+struct WantedLang
+{
+    QString code;
+    QString variant;
+};
+
+QList<WantedLang> langList(const QString& text)
+{
+    QList<WantedLang> out;
+    for (QString part : text.split(QRegularExpression("[,;\\s]+"), Qt::SkipEmptyParts))
+    {
+        part = part.toLower();
+        if (part == QLatin1String("vff") || part == QLatin1String("fr-fr"))
+            out << WantedLang{"fra", "VFF"};
+        else if (part == QLatin1String("vfq") || part == QLatin1String("fr-ca"))
+            out << WantedLang{"fra", "VFQ"};
+        else if (part == QLatin1String("vfi"))
+            out << WantedLang{"fra", "VFI"};
+        else
+            out << WantedLang{normLang(part), QString()};
+    }
+    return out;
+}
+}  // namespace
+
+void TsMuxerWindow::setupTrackRules()
+{
+    auto* box = new QGroupBox(ui->tab_3);
+    auto* grid = new QGridLayout(box);
+    m_rulesEnabled = new QCheckBox(box);
+    m_rulesAudio = new QLineEdit(box);
+    m_rulesSubs = new QLineEdit(box);
+    m_rulesExclude = new QLineEdit(box);
+    m_rulesDropExtras = new QCheckBox(box);
+    auto* audioLabel = new QLabel(box);
+    auto* subsLabel = new QLabel(box);
+    auto* excludeLabel = new QLabel(box);
+    auto* note = new QLabel(box);
+    note->setWordWrap(true);
+    auto* applyBtn = new QPushButton(box);
+    grid->addWidget(m_rulesEnabled, 0, 0, 1, 4);
+    grid->addWidget(audioLabel, 1, 0);
+    grid->addWidget(m_rulesAudio, 1, 1);
+    grid->addWidget(subsLabel, 1, 2);
+    grid->addWidget(m_rulesSubs, 1, 3);
+    grid->addWidget(excludeLabel, 2, 0);
+    grid->addWidget(m_rulesExclude, 2, 1);
+    grid->addWidget(m_rulesDropExtras, 2, 2, 1, 2);
+    grid->addWidget(note, 3, 0, 1, 3);
+    grid->addWidget(applyBtn, 3, 3, Qt::AlignRight);
+    ui->gridLayout_14->addWidget(box, 2, 0, 1, 2);
+
+    const auto texts = [=]
+    {
+        box->setTitle(tr("Automatic track selection"));
+        m_rulesEnabled->setText(tr("When a file is added, keep only the tracks in these languages"));
+        audioLabel->setText(tr("Audio:"));
+        subsLabel->setText(tr("Subtitles:"));
+        excludeLabel->setText(tr("Leave out names containing:"));
+        m_rulesAudio->setPlaceholderText(tr("e.g. vff, eng"));
+        m_rulesSubs->setPlaceholderText(tr("e.g. fra"));
+        m_rulesExclude->setPlaceholderText(tr("e.g. VFQ, Commentary"));
+        m_rulesDropExtras->setText(tr("Leave out commentaries and audio description"));
+        note->setText(tr("The other tracks stay in the list, unticked. Codes of 3 or 2 letters (fra, fr), separated "
+                         "by commas; for French, vff, vfq or vfi keep only that dub, recognised from the track's name or "
+                         "tag. An empty list keeps every track of that kind, and a file with no audio track in "
+                         "these languages keeps all of them."));
+        applyBtn->setText(tr("Apply to the loaded tracks"));
+    };
+    texts();
+    m_retranslateHooks.push_back(texts);
+
+    settings->beginGroup("trackRules");
+    m_rulesEnabled->setChecked(settings->value("enabled", false).toBool());
+    m_rulesAudio->setText(settings->value("audio", "fra, eng").toString());
+    m_rulesSubs->setText(settings->value("subtitles", "fra").toString());
+    m_rulesExclude->setText(settings->value("exclude").toString());
+    m_rulesDropExtras->setChecked(settings->value("dropExtras", true).toBool());
+    settings->endGroup();
+
+    connect(m_rulesEnabled, &QCheckBox::toggled, this, &TsMuxerWindow::saveTrackRules);
+    connect(m_rulesDropExtras, &QCheckBox::toggled, this, &TsMuxerWindow::saveTrackRules);
+    // saved as typed: a field left without Enter or a change of focus (a file dropped from the Explorer) is kept too
+    for (QLineEdit* e : {m_rulesAudio, m_rulesSubs, m_rulesExclude})
+        connect(e, &QLineEdit::textEdited, this, &TsMuxerWindow::saveTrackRules);
+    connect(applyBtn, &QPushButton::clicked, this,
+            [this]
+            {
+                applyTrackRules(0);
+                updateMetaLines();
+            });
+}
+
+void TsMuxerWindow::saveTrackRules()
+{
+    settings->beginGroup("trackRules");
+    settings->setValue("enabled", m_rulesEnabled->isChecked());
+    settings->setValue("audio", m_rulesAudio->text());
+    settings->setValue("subtitles", m_rulesSubs->text());
+    settings->setValue("exclude", m_rulesExclude->text());
+    settings->setValue("dropExtras", m_rulesDropExtras->isChecked());
+    settings->endGroup();
+}
+
+void TsMuxerWindow::applyTrackRules(const int firstRow)
+{
+    const QList<WantedLang> audio = langList(m_rulesAudio->text());
+    const QList<WantedLang> subs = langList(m_rulesSubs->text());
+    const QStringList words = m_rulesExclude->text().split(QRegularExpression("\\s*[,;]\\s*"), Qt::SkipEmptyParts);
+    const auto leftOut = [&](const QtvCodecInfo* info)
+    {
+        const QString name = info->trackName.isEmpty() ? info->srcTrackName : info->trackName;
+        // mkvFlags: 2 visual impaired (audio description), 5 commentary
+        if (m_rulesDropExtras->isChecked() &&
+            (info->mkvFlags[2] || info->mkvFlags[5] || name.contains("comment", Qt::CaseInsensitive) ||
+             name.contains("audiodescription", Qt::CaseInsensitive) ||
+             name.contains("audio description", Qt::CaseInsensitive)))
+            return true;
+        for (const QString& word : words)
+            if (name.contains(word.trimmed(), Qt::CaseInsensitive))
+                return true;
+        return false;
+    };
+    for (const QChar kind : {QChar('A'), QChar('S')})
+    {
+        const QList<WantedLang>& langs = kind == 'A' ? audio : subs;
+        if (langs.isEmpty())
+            continue;
+        QList<int> rows, keep;
+        for (int i = firstRow; i < ui->trackLV->rowCount(); ++i)
+        {
+            const QtvCodecInfo* info = getCodecInfo(i);
+            if (info && info->programName.startsWith(kind))
+                rows << i;
+        }
+        // A dub asked for (vff) keeps the tracks known to be that dub. Where no track of the file is known to be it,
+        // the French tracks nothing places are taken for it: a plain "French" beside a "French VFQ" is the VFF, and
+        // the French is not lost because the file did not say.
+        const auto wanted = [&](const QtvCodecInfo* info)
+        {
+            const QString code = normLang(info->lang);
+            for (const WantedLang& w : langs)
+            {
+                if (w.code != code)
+                    continue;
+                if (w.variant.isEmpty() || info->variant == w.variant)
+                    return true;
+                if (!info->variant.isEmpty())
+                    continue;
+                bool known = false;
+                for (const int r : rows)
+                {
+                    const QtvCodecInfo* other = getCodecInfo(r);
+                    known = known || (normLang(other->lang) == code && other->variant == w.variant);
+                }
+                if (!known)
+                    return true;
+            }
+            return false;
+        };
+        for (const int i : rows)
+        {
+            const QtvCodecInfo* info = getCodecInfo(i);
+            if (wanted(info) && !leftOut(info))
+                keep << i;
+        }
+        if (kind == 'A' && keep.isEmpty())
+            continue;  // never a film without sound
+        for (const int i : rows) ui->trackLV->item(i, 0)->setCheckState(keep.contains(i) ? Qt::Checked : Qt::Unchecked);
+    }
+}
+
+void TsMuxerWindow::updateSizeEstimate()
+{
+    if (!m_sizeLabel)
+        return;
+    // What each ticked track weighs in its source, once per track: the two layers of a Dolby Vision track are two
+    // rows of one track. A core folded into a TrueHD track travels inside it, so it counts when that track is ticked.
+    qint64 total = 0;
+    bool unknown = false, any = false;
+    QSet<QString> counted;
+    for (int i = 0; i < ui->trackLV->rowCount(); ++i)
+    {
+        const QtvCodecInfo* info = getCodecInfo(i);
+        if (!info || info->fileList.isEmpty())
+            continue;
+        bool muxed = ui->trackLV->item(i, 0)->checkState() == Qt::Checked;
+        for (int j = 0; j < ui->trackLV->rowCount(); ++j)
+        {
+            const QtvCodecInfo* other = getCodecInfo(j);
+            if (other && j != i && other->programName == "A_MLP" && other->mergeAc3Track == i + 1)
+                muxed = ui->trackLV->item(j, 0)->checkState() == Qt::Checked;
+        }
+        if (!muxed || isCodecIncompatibleWithFormat(info->programName))
+            continue;
+        any = true;
+        const QString key = info->fileList.join('+') + '|' + QString::number(info->trackID);
+        if (counted.contains(key))
+            continue;
+        counted << key;
+        if (info->bytes > 0)
+            total += info->bytes;
+        else
+            unknown = true;
+    }
+    if (!any || unknown || ui->radioButtonDemux->isChecked())
+    {
+        m_sizeLabel->clear();
+        return;
+    }
+    // Transport stream packets and their headers: measured on a UHD film, the .m2ts is 6.4 % larger than its tracks.
+    // A disc adds its file system and the files beside the clips.
+    const double estimate = total * (ui->radioButtonMKV->isChecked() ? 1.01 : isDiskOutput() ? 1.07 : 1.065);
+    QString text = tr("Estimated size: %1 GB").arg(QLocale().toString(estimate / 1e9, 'f', 1));
+    QString color;
+    if (isDiskOutput() && !ui->radioButtonAVCHD->isChecked())
+    {
+        // usable capacity of each disc, decimal as on the box, less a margin for the file system
+        const struct
+        {
+            const char* name;
+            double bytes;
+        } discs[] = {{"BD-25", 25.0e9}, {"BD-50", 50.0e9}, {"BD-66", 66.8e9}, {"BD-100", 100.1e9}};
+        QString fits;
+        for (const auto& d : discs)
+            if (estimate < d.bytes * 0.99)
+            {
+                fits = d.name;
+                break;
+            }
+        if (fits.isEmpty())
+        {
+            text += " - " + tr("too large for a BD-100");
+            color = "#e05050";
+        }
+        else
+            text += " - " + tr("fits on a %1").arg(fits);
+    }
+    m_sizeLabel->setText(text);
+    m_sizeLabel->setStyleSheet(color.isEmpty() ? QString() : "color:" + color + ";");
+    m_sizeLabel->setToolTip(tr("Worked out from the sizes of the ticked tracks recorded in the source files. "
+                               "Only known for Matroska files made by mkvmerge, MakeMKV and the like."));
+}
+
+void TsMuxerWindow::onExploreDiscClick()
+{
+    const QString file = QFileDialog::getOpenFileName(
+        this, tr("Explore a Blu-ray disc"), lastInputDir.isEmpty() ? getOutputDir() : lastInputDir,
+        tr("Blu-ray disc (*.iso index.bdmv *.mpls);;All files (*)"));
+    if (file.isEmpty())
+        return;
+    lastInputDir = QFileInfo(file).absolutePath();
+    const QString root = discRootOf(QDir::toNativeSeparators(file));
+    if (root.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Disc explorer"),
+                             tr("\"%1\" is not part of a Blu-ray disc: choose a disc image (.iso), or the index.bdmv "
+                                "file of a BDMV folder.")
+                                 .arg(QDir::toNativeSeparators(file)));
+        return;
+    }
+    openDiscExplorer(root);
+}
+
+void TsMuxerWindow::openDiscExplorer(const QString& root)
+{
+    auto* explorer = new DiscExplorer(root, this);
+    explorer->setAttribute(Qt::WA_DeleteOnClose);
+    if (!explorer->load())
+    {
+        delete explorer;
+        return;
+    }
+    connect(explorer, &DiscExplorer::loadPlaylist, this,
+            [this](const QString& path)
+            {
+                clearInputFiles();
+                addFiles({QUrl::fromLocalFile(path)});
+            });
+    connect(explorer, &DiscExplorer::queuePlaylists, this, [this](const QStringList& paths) { startBatch(paths); });
+    explorer->open();
+}
+
+void TsMuxerWindow::setupCompactLayout()
+{
+    // The bars between the areas could always be dragged, but nothing showed them, least of all in a dark theme: a
+    // thin line now marks each one, lit up under the mouse.
+    ui->splitter->setHandleWidth(9);
+    ui->trackSplitter->setHandleWidth(9);
+    // A bar dragged past the smallest height of an area folded that area away whole, the output options with it, and
+    // left the bar at the window's edge where it could hardly be caught again. The bars now stop there.
+    ui->splitter->setChildrenCollapsible(false);
+    ui->trackSplitter->setChildrenCollapsible(false);
+    ui->splitter->setStyleSheet(
+        "QSplitter::handle:vertical { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 transparent, "
+        "stop:0.34 transparent, stop:0.35 rgba(140, 140, 140, 150), stop:0.65 rgba(140, 140, 140, 150), "
+        "stop:0.66 transparent, stop:1 transparent); }"
+        "QSplitter::handle:vertical:hover { background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 transparent, "
+        "stop:0.29 transparent, stop:0.3 palette(highlight), stop:0.7 palette(highlight), stop:0.71 transparent, "
+        "stop:1 transparent); }");
+    // The output options scroll in their area, so the bar above them goes down as far as wanted to give the tracks
+    // more room: what it hides is a scroll away, where the area's smallest height stopped the bar before.
+    {
+        auto* outputScroll = new VerticalScrollArea();
+        outputScroll->setFrameShape(QFrame::NoFrame);
+        outputScroll->setWidgetResizable(true);
+        outputScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        ui->splitter->replaceWidget(ui->splitter->indexOf(ui->groupBox), outputScroll);
+        outputScroll->setWidget(ui->groupBox);
+        // as wide as the area, as it was as wide as the window: the area would otherwise give it its preferred width
+        // and cut off its right side
+        ui->groupBox->setSizePolicy(QSizePolicy::Ignored, ui->groupBox->sizePolicy().verticalPolicy());
+        ui->splitter->setStretchFactor(0, 1);
+        ui->splitter->setStretchFactor(1, 0);
+    }
+
+    // The input file buttons in two rows of two rather than one column of four with gaps: the column set the
+    // smallest height of the file list, which mostly holds a single file.
+    {
+        auto* buttons = new QGridLayout();
+        buttons->setSpacing(4);
+        for (QPushButton* b : {ui->addBtn, ui->addFolderBtn, ui->btnAppend, ui->removeFile})
+            ui->verticalLayout->removeWidget(b);
+        buttons->addWidget(ui->addBtn, 0, 0);
+        buttons->addWidget(ui->addFolderBtn, 0, 1);
+        buttons->addWidget(ui->btnAppend, 1, 0);
+        buttons->addWidget(ui->removeFile, 1, 1);
+        auto* exploreBtn = new QPushButton(ui->addBtn->parentWidget());
+        buttons->addWidget(exploreBtn, 0, 2);
+        connect(exploreBtn, &QPushButton::clicked, this, &TsMuxerWindow::onExploreDiscClick);
+        const auto exploreText = [exploreBtn]
+        {
+            exploreBtn->setText(tr("Explore a disc..."));
+            exploreBtn->setToolTip(tr("Every playlist of a Blu-ray folder or image, with its tracks, clips and "
+                                      "chapters. Several playlists, the episodes of a series for instance, can be "
+                                      "added to the queue at once."));
+        };
+        exploreText();
+        m_retranslateHooks.push_back(exploreText);
+        while (QLayoutItem* item = ui->verticalLayout->takeAt(0)) delete item;  // the spacers
+        ui->verticalLayout->addLayout(buttons);
+        ui->verticalLayout->addStretch();
+        ui->inputFilesLV->setMinimumHeight(ui->inputFilesLV->fontMetrics().height() * 2 + 12);
+    }
+
+    // The estimated size of the output, at the end of the row of output types.
+    m_sizeLabel = new QLabel(ui->groupBox_4);
+    ui->horizontalLayout_7->addWidget(m_sizeLabel);
+
+    // The track buttons keep their column, without the fixed gap.
+    ui->verticalLayout_4->setSpacing(4);
+
+    // The track options panel: no picture beside the options, small margins, and the language of a video track
+    // on the second row. Its height was the tallest of its pages, the Matroska page with its six flags on three
+    // rows, so the video options were spread over that height; the flags now take one row, and a page that is
+    // not shown no longer counts.
+    for (QLabel* picture : {ui->imageVideo, ui->imageAudio, ui->imageSubtitles})
+    {
+        picture->setPixmap(QPixmap());
+        picture->setFixedWidth(0);
+    }
+    for (QLayout* l : {static_cast<QLayout*>(ui->horizontalLayout_8), static_cast<QLayout*>(ui->horizontalLayout_13),
+                       static_cast<QLayout*>(ui->verticalLayoutMkv)})
+        l->setContentsMargins(6, 4, 6, 4);
+    ui->gridLayout->setVerticalSpacing(4);
+    ui->gridLayout_2->setVerticalSpacing(4);
+    ui->gridLayout->removeWidget(ui->videoLangLabel);
+    ui->gridLayout->removeWidget(ui->videoLangComboBox);
+    ui->gridLayout->removeItem(ui->horizontalSpacer_24);
+    ui->gridLayout->addWidget(ui->videoLangLabel, 1, 5);
+    ui->gridLayout->addWidget(ui->videoLangComboBox, 1, 6);
+    ui->gridLayout->addItem(ui->horizontalSpacer_24, 0, 7, 2, 1);
+    {
+        QCheckBox* const flags[6] = {ui->mkvFlagForced,   ui->mkvFlagHearing,  ui->mkvFlagVisual,
+                                     ui->mkvFlagTextDesc, ui->mkvFlagOriginal, ui->mkvFlagCommentary};
+        for (QCheckBox* f : flags) ui->gridLayoutMkvFlags->removeWidget(f);
+        for (int k = 0; k < 6; ++k) ui->gridLayoutMkvFlags->addWidget(flags[k], 0, k);
+        ui->gridLayoutMkvFlags->setColumnStretch(6, 1);
+        ui->verticalLayoutMkv->setSpacing(4);
+    }
+    // The same for the window's own tabs: the Blu-ray and BDMV -> ISO pages, some 550 pixels high at the least,
+    // held the Input page as high, so the bar above the output options could not go up past that.
+    const auto fitCurrentPage = [](QTabWidget* tabs)
+    {
+        for (int i = 0; i < tabs->count(); ++i)
+        {
+            QWidget* page = tabs->widget(i);
+            const bool current = i == tabs->currentIndex();
+            page->setSizePolicy(QSizePolicy::Preferred, current ? QSizePolicy::Preferred : QSizePolicy::Ignored);
+        }
+        tabs->updateGeometry();
+    };
+    for (QTabWidget* tabs : {ui->tabWidgetTracks, ui->tabWidget})
+    {
+        connect(tabs, &QTabWidget::currentChanged, this, [tabs, fitCurrentPage](int) { fitCurrentPage(tabs); });
+        fitCurrentPage(tabs);
+    }
+
+    // The meta box folds away behind its title: it is read now and then and almost never typed into.
+    m_metaToggle = new QToolButton(ui->groupBox_2);
+    m_metaToggle->setCheckable(true);
+    m_metaToggle->setAutoRaise(true);
+    m_metaToggle->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    // a title, not a pressed button: no accent fill once unfolded
+    m_metaToggle->setStyleSheet("QToolButton { border: none; background: transparent; padding: 2px; }");
+    m_metaToggle->setText(tr("Meta file"));
+    ui->groupBox_2->setTitle(QString());
+    ui->verticalLayout_6->insertWidget(0, m_metaToggle);
+    ui->verticalLayout_6->setContentsMargins(6, 2, 6, 6);
+    // folded, the title stays at the top of the row the Dual-layer group beside it makes
+    ui->verticalLayout_6->addStretch();
+    connect(m_metaToggle, &QToolButton::toggled, this, &TsMuxerWindow::setMetaExpanded);
+    // retranslateUi puts the group's title back
+    m_retranslateHooks.push_back(
+        [this]
+        {
+            m_metaToggle->setText(tr("Meta file"));
+            ui->groupBox_2->setTitle(QString());
+        });
+
+    settings->beginGroup("layout");
+    const bool metaExpanded = settings->value("metaExpanded", false).toBool();
+    const QByteArray mainState = settings->value("mainSplitter").toByteArray();
+    const QByteArray trackState = settings->value("trackSplitter").toByteArray();
+    settings->endGroup();
+    m_metaToggle->setChecked(metaExpanded);
+    setMetaExpanded(metaExpanded);
+    // a state saved with an area folded away is not brought back: that area returns at its smallest
+    const auto restore = [](QSplitter* splitter, const QByteArray& state)
+    {
+        return !state.isEmpty() && splitter->restoreState(state) && !splitter->sizes().contains(0);
+    };
+    if (!restore(ui->splitter, mainState))
+        QTimer::singleShot(0, this, &TsMuxerWindow::fitOutputPane);  // once the window has its size
+    if (!restore(ui->trackSplitter, trackState))
+        ui->trackSplitter->setSizes({1, 100000});  // the file list at its smallest, the rest to the tracks
+    // restoreState also brings back the collapsible flags saved with the state
+    ui->splitter->setChildrenCollapsible(false);
+    ui->trackSplitter->setChildrenCollapsible(false);
+}
+
+void TsMuxerWindow::setMetaExpanded(const bool expanded)
+{
+    m_metaToggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
+    ui->memoMeta->setVisible(expanded);
+    ui->verticalLayout_6->setStretch(ui->verticalLayout_6->count() - 1, expanded ? 0 : 1);
+    ui->verticalLayout_6->setStretchFactor(ui->memoMeta, expanded ? 1 : 0);
+    ui->groupBox_2->setMinimumHeight(expanded ? 100 : 0);
+    ui->groupBox_2->setFlat(!expanded);
+    // Folded, the output area is no taller than what it holds, which left an empty band under it; unfolded, the meta
+    // box takes any height given.
+    if (auto* outputScroll = dynamic_cast<VerticalScrollArea*>(ui->splitter->widget(1)))
+        outputScroll->setCapped(!expanded);
+    // the output area opens to show the meta box, and closes back on it
+    if (isVisible())
+        QTimer::singleShot(0, this, &TsMuxerWindow::fitOutputPane);
+}
+
+// The output area at the height of what it holds, the tracks above taking the rest of the window.
+void TsMuxerWindow::fitOutputPane()
+{
+    QList<int> sizes = ui->splitter->sizes();
+    if (sizes.size() < 2)
+        return;
+    const int total = sizes[0] + sizes[1];
+    const int wanted = ui->groupBox->sizeHint().height() + 2;
+    sizes[1] = qMax(0, qMin(wanted, total - ui->tabWidget->minimumSizeHint().height()));
+    sizes[0] = total - sizes[1];
+    ui->splitter->setSizes(sizes);
+}
+
+void TsMuxerWindow::saveLayout()
+{
+    settings->beginGroup("layout");
+    settings->setValue("metaExpanded", m_metaToggle->isChecked());
+    settings->setValue("mainSplitter", ui->splitter->saveState());
+    settings->setValue("trackSplitter", ui->trackSplitter->saveState());
+    settings->endGroup();
 }
 
 // The program choices the window remembers besides the ones writeSettings() names: every control that sets HOW a job
@@ -2510,6 +3228,10 @@ void TsMuxerWindow::onTsMuxerCodecInfoReceived()
         if (p >= 0)
             codecInfo->lang = codecInfo->srcLang =
                 QtCompat::strMid(procStdOutput[i], QString("Stream lang: ").length());
+        if (codecInfo && procStdOutput[i].startsWith("Stream langtag: "))
+            codecInfo->langTag = QtCompat::strMid(procStdOutput[i], QString("Stream langtag: ").length()).trimmed();
+        if (codecInfo && procStdOutput[i].startsWith("Stream bytes: "))
+            codecInfo->bytes = QtCompat::strMid(procStdOutput[i], QString("Stream bytes: ").length()).toLongLong();
         p = procStdOutput[i].indexOf("Stream delay: ");
         if (p >= 0)
         {
@@ -2826,7 +3548,7 @@ void TsMuxerWindow::onVideoComboBoxChanged(int)
     codecInfo->levelText = ui->comboBoxLevel->itemText(ui->comboBoxLevel->currentIndex());
     codecInfo->arText = ui->comboBoxAR->currentData().toString();
     codecInfo->lang = langForTrack(ui->videoLangComboBox, codecInfo->lang);
-    ui->trackLV->item(ui->trackLV->currentRow(), 3)->setText(codecInfo->lang);
+    ui->trackLV->item(ui->trackLV->currentRow(), 3)->setText(langCellText(*codecInfo));
     updateMetaLines();
 }
 
@@ -3124,7 +3846,7 @@ void TsMuxerWindow::onAudioSubtitlesParamsChanged()
         codecInfo->mergeAc3File.clear();
     }
 
-    ui->trackLV->item(ui->trackLV->currentRow(), 3)->setText(codecInfo->lang);
+    ui->trackLV->item(ui->trackLV->currentRow(), 3)->setText(langCellText(*codecInfo));
     colorizeCurrentRow(codecInfo);
 
     // The two default track entries are built once, when the track is added, and carry the
@@ -3538,10 +4260,407 @@ void TsMuxerWindow::inputFilesLVChanged()
     ui->removeFile->setEnabled(itm->data(MplsItemRole).toInt() != MPLS_M2TS);
 }
 
+void TsMuxerWindow::applyInputNameToOutput()
+{
+    if (!ui->checkBoxOutputNameFromInput->isChecked() || ui->inputFilesLV->count() == 0)
+        return;
+    const QString input = myUnquoteStr(ui->inputFilesLV->item(0)->data(FileNameRole).toString());
+    const QString source = sourceFileOf(input);
+    const QString baseName = outputBaseNameOf(input);
+    if (baseName.isEmpty())
+        return;
+
+    const bool folderOutput =
+        ui->radioButtonBluRay->isChecked() || ui->radioButtonAVCHD->isChecked() || ui->radioButtonDemux->isChecked();
+
+    // keep the folder chosen by the user, without a previous input-named subfolder
+    QString dir = unquoteStr(ui->outFileName->text().trimmed());
+    if (dir.isEmpty())
+        dir = getOutputDir();
+    else if (!folderOutput && !QFileInfo(dir).suffix().isEmpty())
+        dir = QFileInfo(dir).absolutePath();
+    dir = QDir::toNativeSeparators(QDir::cleanPath(dir));
+    // a file's folder is the one chosen, even when it bears the film's name
+    if (folderOutput && QFileInfo(dir).fileName() == baseName)
+        dir = QDir::toNativeSeparators(QFileInfo(dir).absolutePath());
+
+    QString outName = outputNameFor(dir, baseName);
+    // an ISO made from an ISO in the same folder would overwrite its own source, and a Blu-ray folder made from one
+    // beside it would write into it
+    const QString discRoot = discRootOf(input);
+    if (QDir::cleanPath(outName).compare(QDir::cleanPath(source), Qt::CaseInsensitive) == 0 ||
+        (!discRoot.isEmpty() && QDir::cleanPath(outName).compare(QDir::cleanPath(discRoot), Qt::CaseInsensitive) == 0))
+        outName = outputNameFor(dir, baseName + "_new");
+    if (outName.isEmpty())
+        return;
+    oldFileName.clear();
+    ui->outFileName->setText(outName);
+}
+
+// Output file (TS/M2TS/ISO) or folder (Blu-ray/AVCHD/demux) named baseName in dir,
+// for the output type currently selected.
+QString TsMuxerWindow::outputNameFor(QString dir, const QString &baseName) const
+{
+    if (!dir.isEmpty() && !dir.endsWith(QDir::separator()))
+        dir += QDir::separator();
+    if (ui->radioButtonTS->isChecked())
+        return dir + baseName + ".ts";
+    if (ui->radioButtonM2TS->isChecked())
+        return dir + baseName + ".m2ts";
+    if (ui->radioButtonMKV->isChecked())
+        return dir + baseName + ".mkv";
+    if (ui->radioButtonBluRayISO->isChecked())
+        return dir + baseName + ".iso";
+    if (ui->radioButtonBluRay->isChecked() || ui->radioButtonAVCHD->isChecked() || ui->radioButtonDemux->isChecked())
+        return dir + baseName + QDir::separator();
+    return QString();
+}
+
+QString TsMuxerWindow::currentOutputType() const
+{
+    for (auto radio : {ui->radioButtonTS, ui->radioButtonM2TS, ui->radioButtonMKV, ui->radioButtonBluRayISO,
+                       ui->radioButtonBluRay, ui->radioButtonAVCHD, ui->radioButtonDemux})
+    {
+        if (radio->isChecked())
+            return radio->text().remove('&');
+    }
+    return QString();
+}
+
+void TsMuxerWindow::clearInputFiles()
+{
+    while (ui->inputFilesLV->count() > 0)
+    {
+        const int before = ui->inputFilesLV->count();
+        ui->inputFilesLV->setCurrentRow(0);
+        onRemoveBtnClick();
+        if (ui->inputFilesLV->count() >= before)
+            break;  // should not happen, avoids looping forever
+    }
+}
+
+void TsMuxerWindow::onAddFolderBtnClick()
+{
+    if (folderBatch)
+        return;
+    const QString folder = QFileDialog::getExistingDirectory(this, tr("Select a folder to scan for MKV and ISO files"),
+                                                             lastInputDir.isEmpty() ? getOutputDir() : lastInputDir);
+    if (folder.isEmpty())
+        return;
+    lastInputDir = folder;
+
+    QStringList files;
+    QDirIterator it(folder, {"*.mkv", "*.MKV", "*.iso", "*.ISO"}, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) files << QDir::toNativeSeparators(it.next());
+    files.removeDuplicates();  // "*.mkv" and "*.MKV" match the same files on Windows
+    std::sort(files.begin(), files.end(),
+              [](const QString &a, const QString &b) { return QString::localeAwareCompare(a, b) < 0; });
+    if (files.isEmpty())
+    {
+        QMessageBox::information(this, tr("Add folder"),
+                                 tr("No MKV or ISO file found in \"%1\" and its subfolders.").arg(QDir::toNativeSeparators(folder)));
+        return;
+    }
+    const auto answer = QMessageBox::question(
+        this, tr("Add folder to the queue"),
+        tr("%1 MKV or Blu-ray ISO files found.\n\nEach file will be added to the mux queue as \"%2\", with all its "
+           "tracks and the current options, and named after the source file. From a disc image, the longest playlist "
+           "is taken, and the discs made by tsMuxeR (earlier conversions) are left out.\nThe files currently loaded "
+           "will be removed from the input list.\n\nContinue?")
+            .arg(files.size())
+            .arg(currentOutputType()));
+    if (answer != QMessageBox::Yes)
+        return;
+
+    startBatch(files);
+}
+
+void TsMuxerWindow::startBatch(const QStringList& files)
+{
+    if (folderBatch || files.isEmpty())
+        return;
+    folderBatch = new FolderBatch;
+    folderBatch->files = files;
+    // the folder of the current output name, unless outputs go next to each source
+    const bool folderOutput =
+        ui->radioButtonBluRay->isChecked() || ui->radioButtonAVCHD->isChecked() || ui->radioButtonDemux->isChecked();
+    QString current = unquoteStr(ui->outFileName->text().trimmed());
+    if (!current.isEmpty() && !folderOutput)
+        current = QFileInfo(current).absolutePath();
+    folderBatch->outputDir = current.isEmpty() ? getOutputDir() : QDir::toNativeSeparators(QDir::cleanPath(current));
+
+    folderBatch->progress = new QProgressDialog(tr("Analyzing files..."), tr("Cancel"), 0, files.size(), this);
+    folderBatch->progress->setWindowModality(Qt::WindowModal);
+    folderBatch->progress->setMinimumDuration(0);
+    folderBatch->progress->setAutoClose(false);
+    folderBatch->progress->setAutoReset(false);
+    connect(&proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            &TsMuxerWindow::onBatchProbeFinished, Qt::QueuedConnection);
+    batchNextFile();
+}
+
+void TsMuxerWindow::batchNextFile()
+{
+    if (!folderBatch)
+        return;
+    if (folderBatch->progress->wasCanceled() || folderBatch->index >= folderBatch->files.size())
+    {
+        finishBatch();
+        return;
+    }
+    const QString file = folderBatch->files[folderBatch->index];
+    folderBatch->progress->setValue(folderBatch->index);
+    folderBatch->progress->setLabelText(tr("Analyzing %1 / %2\n%3")
+                                            .arg(folderBatch->index + 1)
+                                            .arg(folderBatch->files.size())
+                                            .arg(QFileInfo(file).fileName()));
+    clearInputFiles();
+    folderBatch->fileAdded = false;
+    addFiles({QUrl::fromLocalFile(file)});
+    // addFiles() resets the window's own signal connections: connect afterwards
+    connect(this, &TsMuxerWindow::fileAdded, this, &TsMuxerWindow::onBatchFileAdded, Qt::UniqueConnection);
+}
+
+void TsMuxerWindow::onBatchFileAdded()
+{
+    if (!folderBatch || folderBatch->fileAdded)
+        return;
+    folderBatch->fileAdded = true;
+    const QString source = folderBatch->files[folderBatch->index];
+    const QFileInfo sourceInfo(source);
+    const QString dir = ui->radioButtonOutoutInInput->isChecked()
+                            ? QDir::toNativeSeparators(sourceDirOf(source))
+                            : folderBatch->outputDir;
+
+    // an ISO made from an ISO next to it would overwrite its own source
+    QString baseName = sourceInfo.completeBaseName();
+    // a playlist from the explorer: the disc's name and the playlist's, "Movie - 00801" for an episode
+    if (sourceInfo.suffix().compare(QLatin1String("mpls"), Qt::CaseInsensitive) == 0)
+    {
+        if (!discRootOf(source).isEmpty())
+            baseName = outputBaseNameOf(source) + " - " + baseName;
+    }
+    if (QDir::cleanPath(outputNameFor(dir, baseName)).compare(QDir::cleanPath(source), Qt::CaseInsensitive) == 0 ||
+        QDir::cleanPath(outputNameFor(dir, baseName)).compare(QDir::cleanPath(discRootOf(source)), Qt::CaseInsensitive) == 0)
+        baseName += "_new";
+    // two sources with the same name in different subfolders: suffix _2, _3...
+    QString outName = outputNameFor(dir, baseName);
+    for (int n = 2; folderBatch->queuedOutputs.contains(outName, Qt::CaseInsensitive) ||
+                    muxQueue->containsPendingOutput(outName);
+         ++n)
+        outName = outputNameFor(dir, baseName + QString("_%1").arg(n));
+
+    QString existing = outName;
+    while (existing.endsWith(QDir::separator())) existing.chop(1);
+    if (QFileInfo::exists(existing))
+    {
+        folderBatch->skippedExisting << source;
+        return;
+    }
+    oldFileName.clear();
+    ui->outFileName->setText(outName);
+    updateMetaLines();
+    folderBatch->queuedOutputs << outName;
+    muxQueue->addJob(ui->memoMeta->toPlainText(), outName, currentOutputType());
+}
+
+void TsMuxerWindow::onBatchProbeFinished()
+{
+    // runs after the probe's own handling, which emits fileAdded on success
+    if (!folderBatch || folderBatch->index >= folderBatch->files.size())
+        return;
+    if (!folderBatch->fileAdded)
+        folderBatch->failed << folderBatch->files[folderBatch->index];
+    ++folderBatch->index;
+    QTimer::singleShot(0, this, &TsMuxerWindow::batchNextFile);
+}
+
+void TsMuxerWindow::finishBatch()
+{
+    disconnect(&proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+               &TsMuxerWindow::onBatchProbeFinished);
+    disconnect(this, &TsMuxerWindow::fileAdded, this, &TsMuxerWindow::onBatchFileAdded);
+    FolderBatch *batch = folderBatch;
+    folderBatch = nullptr;
+    batch->progress->close();
+    batch->progress->deleteLater();
+    clearInputFiles();
+
+    QString report = tr("%n file(s) added to the queue.", "", batch->queuedOutputs.size());
+    if (!batch->skippedExisting.isEmpty())
+        report += "\n\n" + tr("Already converted (output exists), skipped:") + "\n" + batch->skippedExisting.join('\n');
+    if (!batch->ownDiscs.isEmpty())
+        report += "\n\n" + tr("Disc images made by tsMuxeR (earlier conversions), skipped:") + "\n" +
+                  batch->ownDiscs.join('\n');
+    if (!batch->encrypted.isEmpty())
+        report += "\n\n" + tr("Encrypted disc images (AACS), skipped:") + "\n" + batch->encrypted.join('\n');
+    if (!batch->failed.isEmpty())
+        report += "\n\n" + tr("Not recognized, skipped:") + "\n" + batch->failed.join('\n');
+    delete batch;
+    QMessageBox::information(this, tr("Add folder"), report);
+    showMuxQueue();
+}
+
+static QString findMediaInfo(const QString &configuredPath)
+{
+    if (!configuredPath.isEmpty() && QFileInfo::exists(configuredPath))
+        return configuredPath;
+#ifdef _WIN32
+    // the MediaInfo installer registers itself under App Paths
+    QSettings appPaths(R"(HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\MediaInfo.exe)",
+                       QSettings::NativeFormat);
+    const QString registered = appPaths.value(".").toString();
+    if (!registered.isEmpty() && QFileInfo::exists(registered))
+        return registered;
+    for (const char *var : {"ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"})
+    {
+        const QString candidate = qEnvironmentVariable(var) + "\\MediaInfo\\MediaInfo.exe";
+        if (QFileInfo::exists(candidate))
+            return candidate;
+    }
+#endif
+    // Linux packages (and the Docker image) install the GUI as mediainfo-gui
+    for (const char *name : {"MediaInfo", "mediainfo-gui"})
+    {
+        const QString path = QStandardPaths::findExecutable(name);
+        if (!path.isEmpty())
+            return path;
+    }
+    return QString();
+}
+
+QString TsMuxerWindow::playlistInDiscImage(const QString& image)
+{
+    QProcess proc;
+    proc.setProcessChannelMode(QProcess::MergedChannels);
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    proc.start(tsMuxerBinaryPath(), tsMuxerEngineArgs({"--iso-playlists", QDir::toNativeSeparators(image)}));
+    const bool finished = proc.waitForFinished(120000);
+    QApplication::restoreOverrideCursor();
+
+    struct Playlist
+    {
+        double seconds;
+        int clips;
+        QString path;
+    };
+    QList<Playlist> playlists;  // longest first, as the engine lists them
+    bool encrypted = false;
+    bool ownDisc = false;
+    for (const QString& raw : QString::fromUtf8(proc.readAll()).split('\n'))
+    {
+        const QString line = raw.trimmed();
+        if (line == QLatin1String("Encrypted: 1"))
+            encrypted = true;
+        else if (line == QLatin1String("Authored by: tsMuxeR"))
+            ownDisc = true;
+        else if (line.startsWith(QLatin1String("Playlist: ")))
+        {
+            const QStringList parts = line.mid(10).split(' ');
+            if (parts.size() >= 3)
+                playlists << Playlist{parts[0].toDouble(), parts[1].toInt(),
+                                      QDir::toNativeSeparators(QStringList(parts.mid(2)).join(' '))};
+        }
+    }
+
+    // During "Add folder" nothing is asked: the scan reports the images it left out, and takes the longest playlist.
+    if (folderBatch)
+    {
+        const QString shown = QDir::toNativeSeparators(image);
+        if (!finished || playlists.isEmpty())
+            folderBatch->failed << shown;
+        else if (encrypted)
+            folderBatch->encrypted << shown;
+        else if (ownDisc)
+            folderBatch->ownDiscs << shown;
+        else
+            return playlists[0].path;
+        return QString();
+    }
+    if (!finished || playlists.isEmpty())
+    {
+        QMessageBox::warning(this, tr("Blu-ray disc image"),
+                             tr("No Blu-ray playlist was found in \"%1\". Only Blu-ray disc images, holding a "
+                                "BDMV folder, can be added.")
+                                 .arg(QDir::toNativeSeparators(image)));
+        return QString();
+    }
+    if (encrypted)
+    {
+        QMessageBox::warning(this, tr("Blu-ray disc image"),
+                             tr("\"%1\" is encrypted (AACS), as the disc is when sold. tsMuxeR can only read a "
+                                "decrypted copy of a disc.")
+                                 .arg(QDir::toNativeSeparators(image)));
+        return QString();
+    }
+
+    // The film is the longest playlist. Others close to its length are offered too: another cut of the film, or
+    // the decoys some discs add to hide the real one.
+    QStringList items;
+    for (const Playlist& pl : playlists)
+    {
+        if (pl.seconds < playlists[0].seconds / 2)
+            break;
+        items << tr("%1 - %2 - %n clip(s)", "", pl.clips)
+                     .arg(QFileInfo(pl.path).fileName(), floatToTime(pl.seconds).section('.', 0, 0));
+    }
+    if (items.size() <= 1)
+        return playlists[0].path;
+    bool ok = false;
+    const QString choice = QInputDialog::getItem(
+        this, tr("Blu-ray disc image"),
+        tr("Several playlists of \"%1\" are long enough to be the film.\nThe longest one is usually the film. "
+           "Which one should be added?")
+            .arg(QFileInfo(image).fileName()),
+        items, 0, false, &ok);
+    if (!ok)
+        return QString();
+    return playlists[items.indexOf(choice)].path;
+}
+
+void TsMuxerWindow::openInMediaInfo(const QString &fileName)
+{
+    QString mediaInfo = findMediaInfo(settings->value("mediaInfoPath").toString());
+    if (mediaInfo.isEmpty())
+    {
+        QMessageBox::information(this, tr("MediaInfo not found"),
+                                 tr("MediaInfo was not found on this computer. Please select MediaInfo.exe."));
+        mediaInfo = QFileDialog::getOpenFileName(this, tr("Select MediaInfo"), QString(),
+                                                 tr("MediaInfo (MediaInfo.exe);;Programs (*.exe)"));
+        if (mediaInfo.isEmpty())
+            return;
+        settings->setValue("mediaInfoPath", mediaInfo);
+    }
+    if (!QProcess::startDetached(mediaInfo, {QDir::toNativeSeparators(fileName)}))
+        QMessageBox::warning(this, tr("MediaInfo"), tr("Can't start \"%1\"").arg(mediaInfo));
+}
+
+void TsMuxerWindow::onInputFilesContextMenu(const QPoint &pos)
+{
+    QListWidgetItem *item = ui->inputFilesLV->itemAt(pos);
+    if (!item)
+        return;
+    // MediaInfo reads a disc image whole, and the file manager can only show the image
+    const QString fileName = sourceFileOf(myUnquoteStr(item->data(FileNameRole).toString()));
+    QMenu menu(this);
+    menu.addAction(tr("Open in MediaInfo"), this, [this, fileName] { openInMediaInfo(fileName); });
+    const QString discRoot = discRootOf(myUnquoteStr(item->data(FileNameRole).toString()));
+    if (!discRoot.isEmpty())
+        menu.addAction(tr("Explore the disc..."), this, [this, discRoot] { openDiscExplorer(discRoot); });
+#ifdef _WIN32
+    // no file manager in the Docker image, so this entry is Windows only
+    menu.addAction(tr("Show in folder"), this, [fileName] {
+        QProcess::startDetached("explorer.exe", {"/select,", QDir::toNativeSeparators(fileName)});
+    });
+#endif
+    menu.exec(ui->inputFilesLV->viewport()->mapToGlobal(pos));
+}
+
 void TsMuxerWindow::modifyOutFileName(const QString fileName)
 {
-    QFileInfo fi(unquoteStr(fileName));
-    QString name = fi.completeBaseName();
+    const QString source = sourceFileOf(unquoteStr(fileName));
+    QFileInfo fi(source);
+    QString name = outputBaseNameOf(unquoteStr(fileName));
 
     QString existingName = QDir::toNativeSeparators(ui->outFileName->text());
     QFileInfo fiDst(existingName);
@@ -3566,7 +4685,7 @@ void TsMuxerWindow::modifyOutFileName(const QString fileName)
             ui->outFileName->setText(dir + name + ".iso");
         else
             ui->outFileName->setText(dstPath);
-        if (ui->outFileName->text() == fileName)
+        if (ui->outFileName->text() == fileName || ui->outFileName->text() == source)
             ui->outFileName->setText(dir + name + "_new." + fi.suffix());
     }
 }
@@ -3612,6 +4731,16 @@ void TsMuxerWindow::continueAddFile()
                 continue;
             }
         }
+        // A track the file leaves undetermined whose name says what it is. srcLang stays und, so the language
+        // is written into the output, where the source never had it.
+        bool langFromName = false;
+        if ((info.lang.isEmpty() || info.lang == "und") && !isVideoCodec(info.displayName))
+            if (const QString guess = langFromTrackName(info.trackName); !guess.isEmpty())
+            {
+                info.lang = guess;
+                langFromName = true;
+            }
+        info.variant = frenchVariant(info);
         if (mplsFileList.isEmpty())
             info.fileList << newFileName;
         else
@@ -3677,8 +4806,17 @@ void TsMuxerWindow::continueAddFile()
         item = new QTableWidgetItem(info.displayName);
         item->setFlags(item->flags() & (~Qt::ItemIsEditable));
         ui->trackLV->setItem(newTrackRowIdx, 2, item);
-        item = new QTableWidgetItem(info.lang);
+        item = new QTableWidgetItem(langCellText(info));
         item->setFlags(item->flags() & (~Qt::ItemIsEditable));
+        if (langFromName)
+        {
+            item->setToolTip(tr("The file leaves this track's language undetermined (und): taken from its name, "
+                                "\"%1\". It can be changed in the track options.")
+                                 .arg(info.trackName));
+            QFont italic = item->font();
+            italic.setItalic(true);
+            item->setFont(italic);
+        }
         ui->trackLV->setItem(newTrackRowIdx, 3, item);
         item = new QTableWidgetItem(info.descr);
         item->setFlags(item->flags() & (~Qt::ItemIsEditable));
@@ -3688,6 +4826,10 @@ void TsMuxerWindow::continueAddFile()
         colorizeCurrentRow(&info, newTrackRowIdx);
         addTrackToDefaultComboBox(newTrackRowIdx);
     }
+    if (firstAddedIndex >= 0)
+        autoMergeTrueHdCores(firstAddedIndex);
+    if (firstAddedIndex >= 0 && m_rulesEnabled && m_rulesEnabled->isChecked())
+        applyTrackRules(firstAddedIndex);
     if (firstAddedIndex >= 0)
     {
         ui->trackLV->setRangeSelected(QTableWidgetSelectionRange(firstAddedIndex, 0, ui->trackLV->rowCount() - 1, 4),
@@ -3732,6 +4874,7 @@ void TsMuxerWindow::continueAddFile()
         modifyOutFileName(newFileName);
         outFileNameModified = true;
     }
+    applyInputNameToOutput();
     updateMaxOffsets();
     updateCustomChapters();
     updateDvProfileVisible();
@@ -3836,9 +4979,12 @@ void TsMuxerWindow::addLines(const QByteArray& arr, QList<QString>& outList, boo
         {
             if (runInMuxMode)
             {
-                if (!text.isEmpty())
-                    text += '\n';
-                text += strList[i];
+                for (const auto& shown : muxLog.format(strList[i]))
+                {
+                    if (!text.isEmpty())
+                        text += '\n';
+                    text += shown;
+                }
             }
             else
                 outList << strList[i];
@@ -3937,15 +5083,20 @@ void TsMuxerWindow::onProcessFinished(int exitCode, QProcess::ExitStatus exitSta
     }
     processExitCode = exitCode;
     processExitStatus = exitStatus;
+    if (runInMuxMode)
+        muxForm->addStdOutLine(muxLog.summary(exitStatus == QProcess::NormalExit ? exitCode : -1).join('\n'));
     muxForm->muxFinished(processExitCode, ui->radioButtonDemux->isChecked() ? tr("Demux") : tr("Mux"));
     ui->buttonMux->setEnabled(true);
     ui->addBtn->setEnabled(true);
+    ui->addFolderBtn->setEnabled(true);
     inputFilesLVChanged();
     if (processExitCode == 0)
         emit tsMuxerSuccessFinished();
     else if (!runInMuxMode && exitStatus == QProcess::NormalExit)
     {
-        showProbeRefusal();
+        // during "Add folder" the final report lists the files that could not be read
+        if (!folderBatch)
+            showProbeRefusal();
         // Adding several files went on only from a file that was added, so every file chosen after a refused one
         // was dropped without a word. The rest is examined now, as if the refused one had not been chosen.
         if (!addFileList.isEmpty() && m_addNextFile)
@@ -3995,6 +5146,7 @@ void TsMuxerWindow::onProcessError(QProcess::ProcessError error)
         msgBox.setText(tr("tsMuxeR not found!"));
         ui->buttonMux->setEnabled(true);
         ui->addBtn->setEnabled(true);
+    ui->addFolderBtn->setEnabled(true);
         inputFilesLVChanged();
         break;
     case QProcess::Crashed:
@@ -4027,8 +5179,11 @@ void TsMuxerWindow::onProcessError(QProcess::ProcessError error)
     msgBox.exec();
 }
 
-static QString getTsMuxerBinaryPath()
+QString tsMuxerBinaryPath()
 {
+#ifdef TSMUXER_UNIFIED
+    return QCoreApplication::applicationFilePath();
+#endif
     const auto applicationDirPath =
         QDir::toNativeSeparators(QCoreApplication::applicationDirPath()) + QDir::separator();
     for (auto binaryName : {"tsmuxer", "tsMuxeR"})
@@ -4042,9 +5197,18 @@ static QString getTsMuxerBinaryPath()
     return QString();
 }
 
+QStringList tsMuxerEngineArgs(const QStringList& args)
+{
+#ifdef TSMUXER_UNIFIED
+    return QStringList("--engine") + args;
+#else
+    return args;
+#endif
+}
+
 void TsMuxerWindow::tsMuxerExecute(const QStringList& args)
 {
-    const auto exePath = getTsMuxerBinaryPath();
+    const auto exePath = tsMuxerBinaryPath();
     // Carried on EVERY call, so what the track list shows and what the mux writes agree. The
     // muxer takes it out of the argument list before it counts the arguments, so the modes are
     // unaffected, the BDMV to ISO one included. Left off entirely at the default, which keeps
@@ -4061,7 +5225,7 @@ void TsMuxerWindow::tsMuxerExecute(const QStringList& args)
     m_pendingStdErr.clear();
     processFinished = false;
     processExitCode = -1;
-    proc.start(exePath, allArgs);
+    proc.start(exePath, tsMuxerEngineArgs(allArgs));
     if (muxForm->isVisible())
         muxForm->setProcess(&proc);
 }
@@ -4674,6 +5838,68 @@ int TsMuxerWindow::mergeAc3TrackIdForRow(const int row) const
     return info != nullptr && info->trackID != 0 ? info->trackID : row;
 }
 
+// A Matroska remux of a disc stores the TrueHD track and its AC-3 core as two tracks, and a Blu-ray made from it
+// without putting them back together has a TrueHD track with no core: players that do not decode TrueHD play
+// nothing. Each TrueHD track of the file just added (rows firstRow onwards) is merged with an AC-3 track of the same
+// file and language: the one named as the compatibility track if there is one, else the nearest one after it. Only a
+// 48 kHz AC-3, the one rate a core can have, and each AC-3 track serves one TrueHD track. Tracks merged by hand are
+// left as they are, and the merge can still be changed or removed in the track's options.
+void TsMuxerWindow::autoMergeTrueHdCores(const int firstRow)
+{
+    const int rows = ui->trackLV->rowCount();
+    QList<int> taken;
+    for (int i = 0; i < rows; ++i)
+    {
+        const QtvCodecInfo* info = getCodecInfo(i);
+        if (info && info->programName == "A_MLP" && info->mergeAc3Track > 0)
+            taken << info->mergeAc3Track - 1;
+    }
+    for (int i = firstRow; i < rows; ++i)
+    {
+        QtvCodecInfo* trueHd = getCodecInfo(i);
+        if (!trueHd || trueHd->programName != "A_MLP" || trueHd->trackID == 0 || trueHd->mergeAc3Track > 0 ||
+            !trueHd->mergeAc3File.isEmpty())
+            continue;
+        QList<int> candidates;  // the rows after the TrueHD track first, then those before it
+        for (int j = i + 1; j < rows; ++j) candidates << j;
+        for (int j = firstRow; j < i; ++j) candidates << j;
+        int core = -1;
+        for (int pass = 0; pass < 2 && core < 0; ++pass)
+            for (const int j : candidates)
+            {
+                const QtvCodecInfo* ac3 = getCodecInfo(j);
+                if (!ac3 || ac3->programName != "A_AC3" || ac3->displayName != "AC3" || ac3->trackID == 0 ||
+                    ac3->lang != trueHd->lang || !ac3->descr.contains("48KHz") || taken.contains(j))
+                    continue;
+                // a VFF TrueHD track does not take the VFQ's AC-3 as its core
+                if (!ac3->variant.isEmpty() && !trueHd->variant.isEmpty() && ac3->variant != trueHd->variant)
+                    continue;
+                if (pass == 0 && !ac3->srcTrackName.contains("compat", Qt::CaseInsensitive))
+                    continue;
+                core = j;
+                break;
+            }
+        if (core < 0)
+            continue;
+        trueHd->mergeAc3Track = core + 1;
+        taken << core;
+    }
+}
+
+template <typename F>
+void TsMuxerWindow::remapMergeAc3Rows(F newRowOf)
+{
+    for (int i = 0; i < ui->trackLV->rowCount(); ++i)
+    {
+        QtvCodecInfo* info = getCodecInfo(i);
+        if (info && info->mergeAc3Track > 0 && info->mergeAc3Track <= ui->trackLV->rowCount())
+        {
+            const int row = newRowOf(info->mergeAc3Track - 1);
+            info->mergeAc3Track = row < 0 ? 0 : row + 1;
+        }
+    }
+}
+
 // True when this row is the one some TrueHD track is folding into itself.
 bool TsMuxerWindow::isRowMergedIntoTrueHd(const int row) const
 {
@@ -4691,6 +5917,7 @@ void TsMuxerWindow::updateMetaLines()
 {
     if (!m_updateMeta || disableUpdatesCnt > 0)
         return;
+    updateSizeEstimate();
 
     if (m_metaUserOverride)
         return;
@@ -5022,6 +6249,7 @@ void TsMuxerWindow::onRemoveBtnClick()
     if (ui->inputFilesLV->count() > 0)
         ui->inputFilesLV->setCurrentRow(idx);
     updateRemoveAllEnabled();
+    applyInputNameToOutput();
     updateCustomChapters();
 }
 
@@ -5059,6 +6287,8 @@ void TsMuxerWindow::deleteTrack(int idx)
 {
     disableUpdatesCnt++;
     removeTrackFromDefaultComboBox(idx);
+    // the merge box holds a row number: the rows below this one move up
+    remapMergeAc3Rows([idx](const int row) { return row == idx ? -1 : row > idx ? row - 1 : row; });
     delete getCodecInfo(idx);
     int lastItemIndex = idx;  // trackLV.items[idx].index;
     ui->trackLV->removeRow(idx);
@@ -5320,6 +6550,7 @@ void TsMuxerWindow::onMoveUpButtonCLick()
         return;
     disableUpdatesCnt++;
     auto preMoveRow = ui->trackLV->currentRow();
+    remapMergeAc3Rows([a = preMoveRow, b = preMoveRow - 1](const int row) { return row == a ? b : row == b ? a : row; });
     moveRow(preMoveRow, preMoveRow - 1);
     moveTrackInDefaultComboBox(preMoveRow, preMoveRow - 1);
     disableUpdatesCnt--;
@@ -5334,6 +6565,7 @@ void TsMuxerWindow::onMoveDownButtonCLick()
         return;
     disableUpdatesCnt++;
     auto preMoveRow = ui->trackLV->currentRow();
+    remapMergeAc3Rows([a = preMoveRow, b = preMoveRow + 1](const int row) { return row == a ? b : row == b ? a : row; });
     moveRow(preMoveRow, preMoveRow + 2);
     moveTrackInDefaultComboBox(preMoveRow, preMoveRow + 1);
     disableUpdatesCnt--;
@@ -5525,6 +6757,7 @@ void TsMuxerWindow::RadioButtonMuxClick()
     ui->editDelay->setEnabled(!ui->radioButtonDemux->isChecked());
     updateMkvTrackOptionsEnabled();
     colorizeAllRows();
+    applyInputNameToOutput();
     updateMetaLines();
     outFileNameDisableChange = false;
 }
@@ -5587,22 +6820,39 @@ void TsMuxerWindow::saveFileDialog()
     if (m_fileDialogOpen)
         return;
 
-    if (ui->radioButtonDemux->isChecked() || ui->radioButtonBluRay->isChecked() || ui->radioButtonAVCHD->isChecked())
+    const bool folderOutput =
+        ui->radioButtonDemux->isChecked() || ui->radioButtonBluRay->isChecked() || ui->radioButtonAVCHD->isChecked();
+    // When the output is named after the input, only its folder is left to choose: the name follows the source.
+    if (folderOutput || ui->checkBoxOutputNameFromInput->isChecked())
     {
-        auto* dialog = new QFileDialog(this, tr("Select output folder"), getExistingDialogDir(getOutputDir()));
+        const QString current = unquoteStr(ui->outFileName->text());
+        const QString startDir = folderOutput || current.isEmpty() ? getOutputDir() : QFileInfo(current).absolutePath();
+        auto* dialog = new QFileDialog(this, tr("Select output folder"), getExistingDialogDir(startDir));
         dialog->setFileMode(QFileDialog::Directory);
         dialog->setOption(QFileDialog::ShowDirsOnly, true);
         dialog->setAttribute(Qt::WA_DeleteOnClose);
         m_fileDialogOpen = true;
         connect(dialog, &QFileDialog::finished, this, [this](int) { m_fileDialogOpen = false; });
         connect(dialog, &QFileDialog::fileSelected, this,
-                [this](const QString& folder)
+                [this, folderOutput, current](const QString& folder)
                 {
                     if (folder.isEmpty())
                         return;
                     auto native = QDir::toNativeSeparators(folder);
-                    ui->outFileName->setText(native + QDir::separator());
-                    outFileNameModified = true;
+                    if (folderOutput)
+                    {
+                        ui->outFileName->setText(native + QDir::separator());
+                        outFileNameModified = true;
+                    }
+                    else
+                    {
+                        // the file keeps its name in the new folder, then takes the input's if there is one
+                        QString name = QFileInfo(current).fileName();
+                        if (name.isEmpty())
+                            name = QFileInfo(getDefaultOutputFileName()).fileName();
+                        ui->outFileName->setText(QDir::toNativeSeparators(QDir(folder).filePath(name)));
+                        applyInputNameToOutput();
+                    }
                     lastOutputDir = native;
                     writeSettings();
                 });
@@ -5651,7 +6901,7 @@ void TsMuxerWindow::saveFileDialog()
     }
 }
 
-void TsMuxerWindow::startMuxing()
+bool TsMuxerWindow::checkOutputBeforeMux()
 {
     QString outputName = unquoteStr(ui->outFileName->text().trimmed());
     ui->outFileName->setText(outputName);
@@ -5670,7 +6920,7 @@ void TsMuxerWindow::startMuxing()
             msgBox.setIcon(QMessageBox::Warning);
             msgBox.setStandardButtons(QMessageBox::Ok);
             msgBox.exec();
-            return;
+            return false;
         }
     }
     // TS and Matroska were not checked: tsMuxeR chooses what to write by the output's extension, and takes any other
@@ -5690,7 +6940,7 @@ void TsMuxerWindow::startMuxing()
             msgBox.setIcon(QMessageBox::Warning);
             msgBox.setStandardButtons(QMessageBox::Ok);
             msgBox.exec();
-            return;
+            return false;
         }
     }
     else if (ui->radioButtonBluRayISO->isChecked())
@@ -5705,7 +6955,7 @@ void TsMuxerWindow::startMuxing()
             msgBox.setIcon(QMessageBox::Warning);
             msgBox.setStandardButtons(QMessageBox::Ok);
             msgBox.exec();
-            return;
+            return false;
         }
     }
 
@@ -5723,8 +6973,15 @@ void TsMuxerWindow::startMuxing()
         msgBox.setIcon(QMessageBox::Question);
         msgBox.setStandardButtons(QMessageBox::Yes | QMessageBox::No);
         if (msgBox.exec() != QMessageBox::Yes)
-            return;
+            return false;
     }
+    return true;
+}
+
+void TsMuxerWindow::startMuxing()
+{
+    if (!checkOutputBeforeMux())
+        return;
 
     QFileInfo fi(ui->outFileName->text());
     metaName =
@@ -5737,11 +6994,13 @@ void TsMuxerWindow::startMuxing()
     muxForm->prepare(!ui->radioButtonDemux->isChecked() ? tr("Muxing in progress") : tr("Demuxing in progress"));
     ui->buttonMux->setEnabled(false);
     ui->addBtn->setEnabled(false);
+    ui->addFolderBtn->setEnabled(false);
     ui->btnAppend->setEnabled(false);
     muxForm->show();
     disconnect();
     // QCoreApplication::dir
     runInMuxMode = true;
+    muxLog.start(ui->outFileName->text());
     tsMuxerExecute(QStringList() << metaName << quoteStr(ui->outFileName->text()));
 }
 
@@ -5806,6 +7065,35 @@ void TsMuxerWindow::openMetaFileBtnClick()
     dialog->open();
 }
 
+void TsMuxerWindow::addToQueue()
+{
+    if (!checkOutputBeforeMux())
+        return;
+    const QString outputName = ui->outFileName->text();
+    if (muxQueue->containsPendingOutput(outputName))
+    {
+        QMessageBox::warning(this, tr("Mux queue"),
+                             tr("The output \"%1\" is already waiting in the queue.").arg(outputName));
+        return;
+    }
+    muxQueue->addJob(ui->memoMeta->toPlainText(), outputName, currentOutputType());
+    showMuxQueue();
+}
+
+void TsMuxerWindow::showMuxQueue()
+{
+    muxQueue->show();
+    muxQueue->raise();
+    muxQueue->activateWindow();
+}
+
+void TsMuxerWindow::onQueueFinished(int succeeded, int failed)
+{
+    Q_UNUSED(succeeded);
+    if (ui->checkBoxSound->isChecked())
+        myPlaySound(failed == 0 ? ":/sounds/success.wav" : ":/sounds/fail.wav");
+}
+
 void TsMuxerWindow::saveMetaFileBtnClick()
 {
     if (m_fileDialogOpen)
@@ -5861,11 +7149,23 @@ void TsMuxerWindow::onResetMetaBtnClick()
 
 void TsMuxerWindow::closeEvent(QCloseEvent* event)
 {
+    if (muxQueue->isRunning())
+    {
+        auto answer = QMessageBox::question(this, tr("Mux queue"),
+                                            tr("The mux queue is still running. Stop it and quit?"));
+        if (answer != QMessageBox::Yes)
+        {
+            event->ignore();
+            return;
+        }
+        muxQueue->stop();
+    }
     if (!metaName.isEmpty())
     {
         QFile::remove(metaName);
         metaName.clear();
     }
+    saveLayout();
     muxForm->close();
     event->accept();
 }
@@ -6176,6 +7476,7 @@ void TsMuxerWindow::writeSettings()
     settings->setValue("blankPLNum", ui->BlackplaylistCombo->value());
 
     settings->setValue("outputToInputFolder", ui->radioButtonOutoutInInput->isChecked());
+    settings->setValue("outputNameFromInput", ui->checkBoxOutputNameFromInput->isChecked());
     settings->setValue("outputMode", currentOutputMode());
     settings->setValue("language", ui->languageSelectComboBox->currentText());
     settings->setValue("langCodes", ui->langCodesComboBox->currentData().toString());
@@ -6386,6 +7687,7 @@ bool TsMuxerWindow::readGeneralSettings(const QString& prefix)
     ui->radioButtonOutoutInInput->setChecked(
         settings->value("outputToInputFolder", ui->radioButtonOutoutInInput->isChecked()).toBool());
     ui->radioButtonStoreOutput->setChecked(!ui->radioButtonOutoutInInput->isChecked());
+    ui->checkBoxOutputNameFromInput->setChecked(settings->value("outputNameFromInput").toBool());
 
     // Someone who always demuxes had to set that back on every start. Restored last, so it wins
     // over anything above that also touches the output section.
@@ -6405,10 +7707,39 @@ void TsMuxerWindow::processAddFileList(OnCodecListReadyFn onCodecListReady, Post
     if (addFileList.isEmpty())
         return;
     newFileName = QDir::toNativeSeparators(addFileList[0].toLocalFile());
-    if (lastSourceDir.isEmpty())
-        lastSourceDir = QFileInfo(newFileName).absolutePath();
     addFileList.removeAt(0);
     m_addNextFile = postActionFn;
+    const QString addedName = QFileInfo(newFileName).fileName();
+    if (addedName.compare(QLatin1String("index.bdmv"), Qt::CaseInsensitive) == 0 ||
+        addedName.compare(QLatin1String("MovieObject.bdmv"), Qt::CaseInsensitive) == 0)
+    {
+        const QString root = discRootOf(newFileName);
+        if (!root.isEmpty())
+            QTimer::singleShot(0, this, [this, root] { openDiscExplorer(root); });
+        if (!addFileList.isEmpty())
+            (this->*postActionFn)();
+        return;
+    }
+    if (newFileName.endsWith(QLatin1String(".iso"), Qt::CaseInsensitive) && QFileInfo(newFileName).isFile())
+    {
+        const QString image = newFileName;
+        newFileName = playlistInDiscImage(image);
+        if (newFileName.isEmpty())
+        {
+            // The box has said why; the files chosen after this one are still added.
+            if (!addFileList.isEmpty())
+                (this->*postActionFn)();
+            else if (folderBatch)
+            {
+                // no probe was started, so its end will not move the scan on
+                ++folderBatch->index;
+                QTimer::singleShot(0, this, &TsMuxerWindow::batchNextFile);
+            }
+            return;
+        }
+    }
+    if (lastSourceDir.isEmpty())
+        lastSourceDir = sourceDirOf(newFileName);
     if (!checkFileDuplicate(newFileName))
     {
         // The box has said so; the files chosen after this one are still added.

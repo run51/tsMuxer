@@ -597,6 +597,26 @@ void TSMuxer::intAddStream(const std::string& streamName, const std::string& cod
         }
     }
 
+    // summary line for the GUI log: "Output stream: PID 0x1011 V_MPEGH/ISO/HEVC lang=eng (HDR10)"
+    {
+        char pidText[16];
+        snprintf(pidText, sizeof(pidText), "0x%04X", tsStreamIndex);
+        string role;
+        const int hdr = codecReader != nullptr && codecName[0] == 'V' ? codecReader->getStreamHDR() : 0;
+        if (hdr == 4 && isDvEnhancement)
+            role = " (Dolby Vision enhancement layer + RPU)";
+        else if (hdr == 4)
+            role = " (Dolby Vision)";
+        else if (hdr == 16)
+            role = " (HDR10+)";
+        else if (hdr == 2)
+            role = " (HDR10)";
+        if (isSecondary)
+            role += " (secondary)";
+        LTRACE(LT_INFO, 2, "Output stream: PID " << pidText << " " << codecName << (lang.empty() ? "" : " lang=")
+                                                 << lang << role);
+    }
+
     m_streamInfo[DEFAULT_PCR_PID].m_tsCnt = 0;
     buildNULL();
     buildPAT();

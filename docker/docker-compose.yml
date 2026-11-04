@@ -1,0 +1,27 @@
+# Synology Container Manager project (DSM 7.2): Container Manager > Project >
+# Create, then paste this file. Adjust the paths and USER_ID/GROUP_ID.
+services:
+  tsmuxer:
+    image: tsmuxer-dv:latest
+    container_name: tsmuxer
+    ports:
+      - "5800:5800"            # web interface: http://<nas>:5800
+    volumes:
+      - /volume1/docker/tsmuxer:/config   # settings (create this folder first)
+      - /volume1/video:/storage           # your video share
+    environment:
+      USER_ID: "1026"          # id of your DSM user (ssh: id <user>)
+      GROUP_ID: "100"          # "users" group on DSM
+      UMASK: "0002"            # created files readable by everyone, writable by the group
+      TZ: "Europe/Paris"
+      KEEP_APP_RUNNING: "1"    # restart tsMuxeR if its window is closed
+      DARK_MODE: "1"           # dark theme for tsMuxeR and MediaInfo ("0" = light)
+      DISPLAY_WIDTH: "1600"
+      DISPLAY_HEIGHT: "1000"
+      # optional login page for the web interface (recommended); it needs HTTPS,
+      # the address then becomes https://<nas>:5800 (self-signed certificate):
+      # SECURE_CONNECTION: "1"
+      # WEB_AUTHENTICATION: "1"
+      # WEB_AUTHENTICATION_USERNAME: "admin"
+      # WEB_AUTHENTICATION_PASSWORD: "choose-a-password"
+    restart: unless-stopped

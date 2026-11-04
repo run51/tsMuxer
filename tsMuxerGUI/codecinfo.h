@@ -10,6 +10,12 @@ struct QtvCodecInfo
     QtvCodecInfo(const QtvCodecInfo&) = default;
 
     int trackID = 0;
+    // The size of the track in its source file, from the Matroska statistics tags; 0 when not known.
+    qint64 bytes = 0;
+    // The source's BCP 47 tag (fr-CA), and for a French track the dub it is: VFF (France), VFQ (Quebec) or VFI
+    // (international), from that tag or from the track's name. Empty when nothing says.
+    QString langTag;
+    QString variant;
     int width = 0;
     int height = 0;
     QString displayName;

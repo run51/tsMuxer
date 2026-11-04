@@ -38,7 +38,11 @@ set(tsmuxer_gui_libs Qt6::Widgets)
 # available without its runtime backend deps (e.g. PulseAudio), which causes
 # link failures. Keep multimedia optional and skip it for that build flavor.
 if(Qt6Multimedia_FOUND)
-  if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TSMUXER_STATIC_BUILD)
+  if(TSMUXER_UNIFIED AND WIN32)
+    # the single executable plays its sounds with PlaySound, which avoids
+    # pulling Qt Multimedia (and its FFmpeg/TLS dependencies) into it
+    message(STATUS "Qt6Multimedia found but not used by the single executable")
+  elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TSMUXER_STATIC_BUILD)
     message(STATUS "Qt6Multimedia found but disabled for static Linux build")
   else()
     list(APPEND tsmuxer_gui_libs Qt6::Multimedia)
@@ -79,11 +83,53 @@ set(tsmuxer_gui_sources
   images.qrc
   fontsettingstablemodel.cpp
   systemcolours.cpp
+  muxQueue.cpp
+  discExplorer.cpp
+  engineLog.cpp
   ${QM_FILES}
   ${CMAKE_CURRENT_BINARY_DIR}/${lang_qrc}
 )
 
-if (WIN32)
+if (TSMUXER_UNIFIED)
+  # one executable: the GUI, which also runs the muxer engine on the command line
+  set(tsmuxer_gui_target tsMuxeR)
+  list(APPEND tsmuxer_gui_sources unifiedLauncher.cpp)
+  list(APPEND tsmuxer_gui_libs tsmuxer)
+else()
+  set(tsmuxer_gui_target tsMuxerGUI)
+endif()
+
+if (TSMUXER_UNIFIED AND WIN32)
+  add_executable(tsMuxeR WIN32 ${tsmuxer_gui_sources} icon.rc)
+  if(TSMUXER_STATIC_BUILD AND NOT MSVC)
+    target_link_options(tsMuxeR PRIVATE -static -static-libgcc -static-libstdc++)
+    # MSYS2's harfbuzz CMake package always points at its DLL; use the static
+    # archive and its pkg-config dependency chain (glib, graphite2...) instead
+    if(TARGET harfbuzz::harfbuzz)
+      find_library(HARFBUZZ_STATIC_LIB libharfbuzz.a REQUIRED)
+      set_target_properties(harfbuzz::harfbuzz PROPERTIES
+        IMPORTED_LOCATION "${HARFBUZZ_STATIC_LIB}" IMPORTED_IMPLIB "")
+      find_package(PkgConfig REQUIRED)
+      pkg_check_modules(HARFBUZZ_PC REQUIRED harfbuzz)
+      list(TRANSFORM HARFBUZZ_PC_STATIC_LIBRARIES PREPEND "-l")
+      list(JOIN HARFBUZZ_PC_STATIC_LIBRARIES " " harfbuzz_static_deps)
+    endif()
+    # transitive dependencies of the static OpenSSL, FreeType and HarfBuzz used
+    # by Qt, which their imported targets do not declare; they must come last
+    # on the link line, after libcrypto.a and libfreetype.a
+    string(APPEND CMAKE_CXX_STANDARD_LIBRARIES
+      " ${harfbuzz_static_deps} -liconv -lws2_32 -lcrypt32 -lbz2 -lbrotlidec -lbrotlicommon")
+  endif()
+  if(COMMAND qt_import_plugins)
+    # PNG/ICO are built into QtGui; the extra image format and TLS plugins only
+    # add dependencies (libtiff, libwebp, OpenSSL...) that tsMuxeR never uses
+    qt_import_plugins(tsMuxeR EXCLUDE_BY_TYPE imageformats tls networkinformation iconengines)
+  endif()
+elseif (TSMUXER_UNIFIED AND UNIX AND NOT APPLE)
+  # Linux single executable, used by the Docker image
+  add_executable(tsMuxeR ${tsmuxer_gui_sources})
+  install(TARGETS tsMuxeR DESTINATION ${CMAKE_INSTALL_BINDIR})
+elseif (WIN32)
   add_executable(tsMuxerGUI WIN32 ${tsmuxer_gui_sources} icon.rc)
 elseif (APPLE)
   set(MACOSX_BUNDLE_ICON_FILE tsMuxerGUI.icns)
@@ -121,12 +167,12 @@ elseif (UNIX)
           RENAME tsMuxerGUI.png)
 endif()
 
-target_link_libraries(tsMuxerGUI ${tsmuxer_gui_libs})
+target_link_libraries(${tsmuxer_gui_target} ${tsmuxer_gui_libs})
 
 # PlaySound, used for the end-of-mux sound on Windows where Qt Multimedia is not built.
 # See myPlaySound in tsmuxerwindow.cpp.
 if(WIN32)
-  target_link_libraries(tsMuxerGUI winmm)
+  target_link_libraries(${tsmuxer_gui_target} winmm)
 endif()
 
 # "Play sound at end" is guarded by QT_MULTIMEDIA_LIB in the source. qmake defined that
@@ -136,7 +182,7 @@ endif()
 # worked in a qmake build. Defined here in step with the linking above, so the static Linux
 # build that deliberately leaves Multimedia out still takes the beep path.
 if(TSMUXER_HAVE_MULTIMEDIA)
-  target_compile_definitions(tsMuxerGUI PRIVATE QT_MULTIMEDIA_LIB=1)
+  target_compile_definitions(${tsmuxer_gui_target} PRIVATE QT_MULTIMEDIA_LIB=1)
 endif()
 
 # On macOS, ensure tsMuxeR CLI is built before the GUI (for the copy step)

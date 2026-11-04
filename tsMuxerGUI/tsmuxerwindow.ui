@@ -107,6 +107,16 @@
                  </widget>
                 </item>
                 <item>
+                 <widget class="QPushButton" name="addFolderBtn">
+                  <property name="toolTip">
+                   <string>Add every MKV file of a folder and its subfolders to the mux queue, one job per file, with the current output settings</string>
+                  </property>
+                  <property name="text">
+                   <string>Add folder</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
                  <widget class="QPushButton" name="btnAppend">
                   <property name="enabled">
                    <bool>false</bool>
@@ -1341,6 +1351,16 @@
               <widget class="QRadioButton" name="radioButtonOutoutInInput">
                <property name="text">
                 <string>Place output folder to a input folder</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QCheckBox" name="checkBoxOutputNameFromInput">
+               <property name="toolTip">
+                <string>Name the output file, ISO or Blu-ray folder after the first input file</string>
+               </property>
+               <property name="text">
+                <string>Use the input file name for the output</string>
                </property>
               </widget>
              </item>
@@ -3122,6 +3142,20 @@ p, li { white-space: pre-wrap; }
        </property>
        <property name="text">
         <string>Start muxing</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonAddToQueue">
+       <property name="text">
+        <string>Add to queue</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="buttonShowQueue">
+       <property name="text">
+        <string>Queue...</string>
        </property>
       </widget>
      </item>

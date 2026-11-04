@@ -79,6 +79,9 @@ class MatroskaDemuxer final : public IOContextDemuxer
     std::vector<std::vector<uint8_t>> getPassThroughAttachments() override;
     std::vector<std::vector<uint8_t>> getGlobalTags() override;
     std::map<uint64_t, std::vector<SourceTrackTag>> getTrackTags() override;
+    // The size of each track, by track UID, from the NUMBER_OF_BYTES statistics tag its writer left (mkvmerge always
+    // does). Empty for a file without them.
+    std::map<uint64_t, uint64_t> getTrackByteCounts();
     [[nodiscard]] uint64_t getTrackUid(int pid) const override
     {
         return pid >= 1 && pid <= num_tracks && tracks[pid - 1] ? tracks[pid - 1]->uid : 0;
@@ -168,6 +171,7 @@ class MatroskaDemuxer final : public IOContextDemuxer
     };
     std::vector<MatroskaAttachment> m_attachments;
     std::string m_attachmentSource;  // the file the payloads are read back from
+    std::map<uint64_t, uint64_t> m_trackBytes;  // filled by getTrackTags, see getTrackByteCounts
     std::string m_sourceName;        // the file openFile opened: getVideoSpanNano reads it on a handle of its own
     void loadAttachments(const std::string& fileName);
     void loadChapters(const std::string& fileName);

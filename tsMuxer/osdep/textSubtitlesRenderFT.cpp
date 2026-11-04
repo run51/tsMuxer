@@ -251,6 +251,21 @@ void TextSubtitlesRenderFT::setFont(const Font& font)
             !strEndWith(fontLower, string(".ttc")))
         {
             auto itr = m_fontNameToFile.find(fontLower);
+            if (itr == m_fontNameToFile.end())
+            {
+                // Linux systems (e.g. the Docker image) rarely ship the Windows fonts the GUI
+                // defaults to: use their metric-compatible Liberation equivalents
+                static const std::map<std::string, std::string> substitutes = {
+                    {"arial", "liberation sans"},
+                    {"times new roman", "liberation serif"},
+                    {"courier new", "liberation mono"},
+                };
+                const auto sub = substitutes.find(fontLower);
+                if (sub != substitutes.end())
+                    itr = m_fontNameToFile.find(sub->second);
+                if (itr != m_fontNameToFile.end())
+                    LTRACE(LT_INFO, 2, "Font " << fontName << " not found, using " << itr->first << " instead");
+            }
             if (itr != m_fontNameToFile.end())
                 fontName = itr->second;
             else

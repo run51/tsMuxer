@@ -33,6 +33,9 @@ class TextFile final : public File
             else
                 break;
         }
+        // files saved as "UTF-8 with BOM" (Notepad, PowerShell) start with EF BB BF
+        if (line.compare(0, 3, "\xEF\xBB\xBF") == 0)
+            line.erase(0, 3);
         return readCnt == 1 || !line.empty();
     }
     bool writeLine(const std::string& line)

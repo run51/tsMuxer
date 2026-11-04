@@ -1,7 +1,7 @@
 cmake_minimum_required (VERSION 3.10)
 project (tsmuxer LANGUAGES CXX)
 
-add_executable (tsmuxer
+set(tsmuxer_sources
   aac.cpp
   aacStreamReader.cpp
   av1.cpp
@@ -73,6 +73,15 @@ add_executable (tsmuxer
   vvcStreamReader.cpp
   wave.cpp
 )
+
+# In the unified build the muxer engine becomes a library linked into the
+# single tsMuxeR executable, which also hosts the GUI.
+if(TSMUXER_UNIFIED)
+  add_library(tsmuxer STATIC ${tsmuxer_sources})
+  target_compile_definitions(tsmuxer PUBLIC TSMUXER_UNIFIED)
+else()
+  add_executable(tsmuxer ${tsmuxer_sources})
+endif()
 
 if(TSMUXER_STATIC_BUILD)
   if(MSVC)
@@ -150,4 +159,6 @@ endif()
 # (dlopen lives in libdl on some systems; CMAKE_DL_LIBS is empty where it does not).
 target_link_libraries(tsmuxer mediation ${THREADSLIB} ${ZLIB_LIBRARIES} ${CMAKE_DL_LIBS})
 
-install (TARGETS tsmuxer DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(NOT TSMUXER_UNIFIED)
+  install (TARGETS tsmuxer DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()

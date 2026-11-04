@@ -18,13 +18,19 @@
 #endif
 
 #include "codecinfo.h"
+#include "engineLog.h"
 
 class QTableWidgetItem;
+class QToolButton;
+class QCheckBox;
+class QLineEdit;
 class QComboBox;
 class QLabel;
 class QCheckBox;
 
 class MuxForm;
+class MuxQueue;
+class QProgressDialog;
 namespace Ui
 {
 class TsMuxerWindow;
@@ -63,6 +69,33 @@ class TsMuxerWindow : public QWidget
     void fileAppended();
 
    private:
+    // More room for the track list: visible and remembered splitters, a tighter track options panel, a
+    // shorter input file list and a meta box that folds away.
+    void setupCompactLayout();
+    void saveLayout();
+    void setMetaExpanded(bool expanded);
+    void fitOutputPane();
+    QToolButton* m_metaToggle = nullptr;
+
+    // Tracks kept by language when a file is added: the others stay in the list, unticked.
+    void setupTrackRules();
+    void saveTrackRules();
+    void applyTrackRules(int firstRow);
+    QCheckBox* m_rulesEnabled = nullptr;
+    QLineEdit* m_rulesAudio = nullptr;
+    QLineEdit* m_rulesSubs = nullptr;
+    QLineEdit* m_rulesExclude = nullptr;
+    QCheckBox* m_rulesDropExtras = nullptr;
+
+    // The size the output will have, from the sizes of the ticked tracks, and the disc it fits on.
+    void updateSizeEstimate();
+    QLabel* m_sizeLabel = nullptr;
+
+    // The disc explorer: the playlists, tracks and clips of a Blu-ray folder or image.
+    void onExploreDiscClick();
+    void openDiscExplorer(const QString& root);
+    // Several files queued one by one, as "Add folder" does.
+    void startBatch(const QStringList& files);
     template <typename F>
     void showAddFilesDialog(QString&& windowTitle, F&& windowOkFn);
     void onAddBtnClick();
@@ -102,6 +135,10 @@ class TsMuxerWindow : public QWidget
     void outFileNameChanged();
     void saveFileDialog();
     void startMuxing();
+    bool checkOutputBeforeMux();
+    void addToQueue();
+    void showMuxQueue();
+    void onQueueFinished(int succeeded, int failed);
     void saveMetaFileBtnClick();
     void onResetMetaBtnClick();
     void openMetaFileBtnClick();
@@ -117,6 +154,20 @@ class TsMuxerWindow : public QWidget
     void updateMuxTime1();
     void updateMuxTime2();
     void snapMuxTimeToBdMinimum();
+    void applyInputNameToOutput();
+    QString outputNameFor(QString dir, const QString& baseName) const;
+    QString currentOutputType() const;
+    void clearInputFiles();
+    void onAddFolderBtnClick();
+    void batchNextFile();
+    void onBatchFileAdded();
+    void onBatchProbeFinished();
+    void finishBatch();
+    void onInputFilesContextMenu(const QPoint& pos);
+    void openInMediaInfo(const QString& fileName);
+    // The playlist to add from a Blu-ray disc image, read in place by the engine. Empty when there is none
+    // to add: the image is encrypted, holds no playlist, or the choice was cancelled.
+    QString playlistInDiscImage(const QString& image);
     void onLanguageComboBoxIndexChanged(int);
     template <typename OnCodecListReadyFn, typename PostActionSignal, typename PostActionFn>
     void processAddFileList(OnCodecListReadyFn onCodecListReady, PostActionSignal postActionSignal,
@@ -178,6 +229,12 @@ class TsMuxerWindow : public QWidget
     [[nodiscard]] int mergeAc3TrackIdForRow(int row) const;
     [[nodiscard]] bool isRowMergedIntoTrueHd(int row) const;
     void updateMergeAc3Suffix();
+    // A TrueHD track of a Matroska file, merged with the AC-3 compatibility track of its language so a Blu-ray
+    // keeps the Atmos track playable on every player.
+    void autoMergeTrueHdCores(int firstRow);
+    // Keeps the merge numbers on their tracks when rows move or go: newRowOf(old row) is the new row, -1 if gone.
+    template <typename F>
+    void remapMergeAc3Rows(F newRowOf);
     // Splitting is produced by the transport stream writer, so not every output can do it.
     [[nodiscard]] bool outputCanSplit() const;
     // Grey the Blu-ray tab's controls that the chosen output does not use.
@@ -234,6 +291,24 @@ class TsMuxerWindow : public QWidget
     QString oldFileName;
     bool outFileNameDisableChange;
     MuxForm* muxForm;
+    MuxQueue* muxQueue;
+    EngineLog muxLog;
+
+    // "Add folder": every MKV found becomes its own queue job
+    struct FolderBatch
+    {
+        QStringList files;
+        int index = 0;
+        bool fileAdded = false;
+        QString outputDir;  // used unless "output to input folder" is selected
+        QStringList queuedOutputs;
+        QStringList skippedExisting;
+        QStringList failed;
+        QStringList ownDiscs;   // disc images written by tsMuxeR: outputs of an earlier conversion
+        QStringList encrypted;  // disc images still under AACS
+        QProgressDialog* progress = nullptr;
+    };
+    FolderBatch* folderBatch = nullptr;
     QString newFileName;
     // The step that takes the next file of addFileList (addFile or appendFile), so that a file that is refused, or
     // already in the list, does not end the adding of the files chosen after it.

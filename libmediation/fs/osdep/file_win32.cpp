@@ -7,6 +7,7 @@
 
 #include "../directory.h"
 #include "../file.h"
+#include "../isofs.h"
 
 // FormatMessage is FormatMessageW in this build, so the text came back in UTF-16 and was read as 8-bit
 // characters: every message stopped after its first letter, and a write Windows refused said only "T"
@@ -70,6 +71,13 @@ File::File(const char* fName, const unsigned int oflag,
            unsigned int systemDependentFlags) /* throw ( std::runtime_error ) */
     : AbstractOutputStream(), m_impl(INVALID_HANDLE_VALUE), m_name(fName), m_pos(0)
 {
+    if ((oflag & ofRead) && !(oflag & ofWrite) && isofs::isInside(fName))
+    {
+        m_iso = isofs::open(fName);
+        if (!m_iso)
+            throw std::runtime_error(std::string("File not found in the disc image: ") + fName);
+        return;
+    }
     DWORD dwDesiredAccess = 0;
     DWORD dwCreationDisposition = CREATE_ALWAYS;
     DWORD dwShareMode = 0;
@@ -111,6 +119,11 @@ bool File::open(const char* fName, const unsigned int oflag, unsigned int system
 {
     m_name = fName;
     m_pos = 0;
+    if ((oflag & ofRead) && !(oflag & ofWrite) && isofs::isInside(fName))
+    {
+        m_iso = isofs::open(fName);
+        return m_iso != nullptr;
+    }
 
     DWORD dwDesiredAccess = 0;
     DWORD dwCreationDisposition = CREATE_ALWAYS;
@@ -147,6 +160,12 @@ bool File::open(const char* fName, const unsigned int oflag, unsigned int system
 
 bool File::close()
 {
+    if (m_iso)
+    {
+        isofs::close(m_iso);
+        m_iso = nullptr;
+        return true;
+    }
     // sync();
     const BOOL res = CloseHandle(m_impl);
     m_impl = INVALID_HANDLE_VALUE;
@@ -157,6 +176,13 @@ int File::read(void* buffer, const uint32_t count) const
 {
     if (!isOpen())
         return -1;
+    if (m_iso)
+    {
+        const int n = isofs::read(m_iso, buffer, count);
+        if (n > 0)
+            m_pos += n;
+        return n;
+    }
 
     DWORD bytesRead = 0;
     const BOOL res = ReadFile(m_impl, buffer, count, &bytesRead, nullptr);
@@ -170,7 +196,7 @@ int File::read(void* buffer, const uint32_t count) const
 
 int File::write(const void* buffer, const uint32_t count)
 {
-    if (!isOpen())
+    if (!isOpen() || m_iso)
         return -1;
 
     DWORD bytesWritten = 0;
@@ -187,12 +213,21 @@ int File::write(const void* buffer, const uint32_t count)
     return static_cast<int>(bytesWritten);
 }
 
-void File::sync() { FlushFileBuffers(m_impl); }
+void File::sync()
+{
+    if (!m_iso)
+        FlushFileBuffers(m_impl);
+}
 
-bool File::isOpen() const { return m_impl != INVALID_HANDLE_VALUE; }
+bool File::isOpen() const { return m_iso != nullptr || m_impl != INVALID_HANDLE_VALUE; }
 
 bool File::size(int64_t* const fileSize) const
 {
+    if (m_iso)
+    {
+        *fileSize = isofs::size(m_iso);
+        return true;
+    }
     DWORD highDw;
     const DWORD lowDw = GetFileSize(m_impl, &highDw);
     if ((lowDw == INVALID_FILE_SIZE) && (GetLastError() != NO_ERROR))
@@ -207,6 +242,13 @@ int64_t File::seek(const int64_t offset, const SeekMethod whence) const
 {
     if (!isOpen())
         return -1;
+    if (m_iso)
+    {
+        const int64_t p = isofs::seek(m_iso, offset, static_cast<int>(whence));
+        if (p >= 0)
+            m_pos = p;
+        return p;
+    }
 
     DWORD moveMethod = FILE_BEGIN;
     switch (whence)
@@ -236,6 +278,8 @@ int64_t File::seek(const int64_t offset, const SeekMethod whence) const
 
 bool File::truncate(const uint64_t newFileSize) const
 {
+    if (m_iso)
+        return false;
     const LONG distanceToMoveLow = static_cast<LONG>(newFileSize);
     LONG distanceToMoveHigh = static_cast<LONG>(newFileSize >> 32);
     const DWORD newPointerLow = SetFilePointer(m_impl, distanceToMoveLow, &distanceToMoveHigh, FILE_BEGIN);

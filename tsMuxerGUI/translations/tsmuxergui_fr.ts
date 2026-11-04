@@ -2640,7 +2640,7 @@ Créer l'ISO malgré tout ?</translation>
     <message>
         <location filename="../tsmuxerwindow.ui" line="99"/>
         <source>add</source>
-        <translation>ajouter</translation>
+        <translation>Ajouter fichier</translation>
     </message>
     <message>
         <location filename="../tsmuxerwindow.ui" line="115"/>
@@ -4400,6 +4400,723 @@ Créer l'ISO malgré tout ?</translation>
         <location filename="../muxForm.ui" line="211"/>
         <source>Abort</source>
         <translation>Annuler</translation>
+    </message>
+</context>
+<context>
+    <name>MuxQueue</name>
+    <message>
+        <source>Interrupted when tsMuxeR was closed: the job will start again from the beginning.</source>
+        <translation>Interrompue à la fermeture de tsMuxeR : la tâche reprendra depuis le début.</translation>
+    </message>
+    <message>
+        <source>Mux queue</source>
+        <translation>File d&apos;attente</translation>
+    </message>
+    <message>
+        <source>Output</source>
+        <translation>Sortie</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>State</source>
+        <translation>État</translation>
+    </message>
+    <message>
+        <source>Progress</source>
+        <translation>Progression</translation>
+    </message>
+    <message>
+        <source>Start queue</source>
+        <translation>Démarrer la file</translation>
+    </message>
+    <message>
+        <source>Stop</source>
+        <translation>Arrêter</translation>
+    </message>
+    <message>
+        <source>Move up</source>
+        <translation>Monter</translation>
+    </message>
+    <message>
+        <source>Move down</source>
+        <translation>Descendre</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Retirer</translation>
+    </message>
+    <message>
+        <source>Retry</source>
+        <translation>Relancer</translation>
+    </message>
+    <message>
+        <source>Clear finished</source>
+        <translation>Effacer les terminés</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Waiting</source>
+        <translation>En attente</translation>
+    </message>
+    <message>
+        <source>Running</source>
+        <translation>En cours</translation>
+    </message>
+    <message>
+        <source>Done</source>
+        <translation>Terminé</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation>Erreur</translation>
+    </message>
+    <message>
+        <source>Cancelled</source>
+        <translation>Annulé</translation>
+    </message>
+    <message>
+        <source>Can&apos;t create temporary meta file &quot;%1&quot;</source>
+        <translation>Impossible de créer le fichier meta temporaire « %1 »</translation>
+    </message>
+    <message>
+        <source>tsMuxeR not found!</source>
+        <translation>tsMuxeR introuvable !</translation>
+    </message>
+    <message>
+        <source>tsMuxeR finished with error code %1</source>
+        <translation>tsMuxeR s&apos;est terminé avec le code d&apos;erreur %1</translation>
+    </message>
+    <message>
+        <source>Job %1 of %2 - total %3%</source>
+        <translation>Tâche %1 sur %2 - total %3 %</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n job(s) in the queue</source>
+        <translation>
+            <numerusform>%n tâche dans la file</numerusform>
+            <numerusform>%n tâches dans la file</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>TsMuxerWindow</name>
+    <message>
+        <source>e.g. vff, eng</source>
+        <translation>ex. vff, eng</translation>
+    </message>
+    <message>
+        <source>The other tracks stay in the list, unticked. Codes of 3 or 2 letters (fra, fr), separated by commas; for French, vff, vfq or vfi keep only that dub, recognised from the track&apos;s name or tag. An empty list keeps every track of that kind, and a file with no audio track in these languages keeps all of them.</source>
+        <translation>Les autres pistes restent dans la liste, décochées. Codes de 3 ou 2 lettres (fra, fr), séparés par des virgules ; pour le français, vff, vfq ou vfi ne gardent que ce doublage, reconnu d&apos;après le nom ou l&apos;étiquette de la piste. Une liste vide garde toutes les pistes de ce type, et un fichier sans piste audio dans ces langues les garde toutes.</translation>
+    </message>
+    <message>
+        <source>The file leaves this track&apos;s language undetermined (und): taken from its name, &quot;%1&quot;. It can be changed in the track options.</source>
+        <translation>Le fichier laisse la langue de cette piste indéterminée (und) : elle est déduite de son nom, « %1 ». Elle se modifie dans les options de la piste.</translation>
+    </message>
+    <message>
+        <source>Automatic track selection</source>
+        <translation>Sélection automatique des pistes</translation>
+    </message>
+    <message>
+        <source>When a file is added, keep only the tracks in these languages</source>
+        <translation>À l&apos;ajout d&apos;un fichier, ne garder que les pistes dans ces langues</translation>
+    </message>
+    <message>
+        <source>Audio:</source>
+        <translation>Audio :</translation>
+    </message>
+    <message>
+        <source>Subtitles:</source>
+        <translation>Sous-titres :</translation>
+    </message>
+    <message>
+        <source>Leave out names containing:</source>
+        <translation>Écarter les noms contenant :</translation>
+    </message>
+    <message>
+        <source>e.g. fra, eng</source>
+        <translation>ex. fra, eng</translation>
+    </message>
+    <message>
+        <source>e.g. fra</source>
+        <translation>ex. fra</translation>
+    </message>
+    <message>
+        <source>e.g. VFQ, Commentary</source>
+        <translation>ex. VFQ, Commentaire</translation>
+    </message>
+    <message>
+        <source>Leave out commentaries and audio description</source>
+        <translation>Écarter les commentaires et l&apos;audiodescription</translation>
+    </message>
+    <message>
+        <source>The other tracks stay in the list, unticked. Codes of 3 or 2 letters (fra, fr), separated by commas. An empty list keeps every track of that kind, and a file with no audio track in these languages keeps all of them.</source>
+        <translation>Les autres pistes restent dans la liste, décochées. Codes de 3 ou 2 lettres (fra, fr), séparés par des virgules. Une liste vide garde toutes les pistes de ce type, et un fichier sans piste audio dans ces langues les garde toutes.</translation>
+    </message>
+    <message>
+        <source>Apply to the loaded tracks</source>
+        <translation>Appliquer aux pistes chargées</translation>
+    </message>
+    <message>
+        <source>Estimated size: %1 GB</source>
+        <translation>Taille estimée : %1 Go</translation>
+    </message>
+    <message>
+        <source>too large for a BD-100</source>
+        <translation>trop grand pour un BD-100</translation>
+    </message>
+    <message>
+        <source>fits on a %1</source>
+        <translation>tient sur un %1</translation>
+    </message>
+    <message>
+        <source>Worked out from the sizes of the ticked tracks recorded in the source files. Only known for Matroska files made by mkvmerge, MakeMKV and the like.</source>
+        <translation>Calculée d&apos;après la taille des pistes cochées, enregistrée dans les fichiers sources. Connue seulement pour les fichiers Matroska créés par mkvmerge, MakeMKV, etc.</translation>
+    </message>
+    <message>
+        <source>Explore a Blu-ray disc</source>
+        <translation>Explorer un disque Blu-ray</translation>
+    </message>
+    <message>
+        <source>Blu-ray disc (*.iso index.bdmv *.mpls);;All files (*)</source>
+        <translation>Disque Blu-ray (*.iso index.bdmv *.mpls);;Tous les fichiers (*)</translation>
+    </message>
+    <message>
+        <source>Disc explorer</source>
+        <translation>Explorateur de disque</translation>
+    </message>
+    <message>
+        <source>&quot;%1&quot; is not part of a Blu-ray disc: choose a disc image (.iso), or the index.bdmv file of a BDMV folder.</source>
+        <translation>« %1 » ne fait pas partie d&apos;un disque Blu-ray : choisissez une image (.iso), ou le fichier index.bdmv d&apos;un dossier BDMV.</translation>
+    </message>
+    <message>
+        <source>Explore a disc...</source>
+        <translation>Explorer un disque…</translation>
+    </message>
+    <message>
+        <source>Every playlist of a Blu-ray folder or image, with its tracks, clips and chapters. Several playlists, the episodes of a series for instance, can be added to the queue at once.</source>
+        <translation>Toutes les playlists d&apos;un dossier ou d&apos;une image Blu-ray, avec leurs pistes, clips et chapitres. Plusieurs playlists, les épisodes d&apos;une série par exemple, peuvent être ajoutées à la file d&apos;un coup.</translation>
+    </message>
+    <message>
+        <source>Explore the disc...</source>
+        <translation>Explorer le disque…</translation>
+    </message>
+    <message>
+        <source>Drop the AC-3 core, keep the lossless part</source>
+        <translation>Supprimer le noyau AC-3, conserver la partie sans perte</translation>
+    </message>
+    <message>
+        <source>tsMuxeR stopped without reporting a reason.
+
+If this appeared while a file was still being examined, or as the window was closing, the process was ended before it could finish. Nothing has been written.</source>
+        <translation>tsMuxeR s&apos;est arrêté sans donner de raison.
+
+Si ce message est apparu pendant l&apos;analyse d&apos;un fichier, ou à la fermeture de la fenêtre, le traitement a été interrompu avant la fin. Rien n&apos;a été écrit.</translation>
+    </message>
+    <message>
+        <source> (track %1 in the file)</source>
+        <translation> (piste %1 du fichier)</translation>
+    </message>
+    <message>
+        <source>A Blu-ray carries a TrueHD track with its AC-3 core braided into the same stream, and a Matroska file has to keep them apart. Give the ROW NUMBER of the AC-3 track in the list above and the two are put back together, which is what a disc needs. 0 leaves them separate. That row keeps its tick and is still shown, it simply travels inside the TrueHD track instead of being written on its own.</source>
+        <translation>Un Blu-ray porte la piste TrueHD avec son noyau AC-3 entrelacé dans le même flux, alors qu&apos;un fichier Matroska doit les garder séparés. Indiquez le NUMÉRO DE LIGNE de la piste AC-3 dans la liste ci-dessus et les deux sont réunis, comme l&apos;exige un disque. 0 les laisse séparés. Cette ligne reste cochée et affichée : elle voyage simplement à l&apos;intérieur de la piste TrueHD au lieu d&apos;être écrite seule.</translation>
+    </message>
+    <message>
+        <source>Disc images made by tsMuxeR (earlier conversions), skipped:</source>
+        <translation>Images disque créées par tsMuxeR (conversions précédentes), ignorées :</translation>
+    </message>
+    <message>
+        <source>Encrypted disc images (AACS), skipped:</source>
+        <translation>Images disque chiffrées (AACS), ignorées :</translation>
+    </message>
+    <message>
+        <source>Blu-ray disc image</source>
+        <translation>Image disque Blu-ray (ISO)</translation>
+    </message>
+    <message>
+        <source>No Blu-ray playlist was found in &quot;%1&quot;. Only Blu-ray disc images, holding a BDMV folder, can be added.</source>
+        <translation>Aucune liste de lecture Blu-ray dans « %1 ». Seules les images de disque Blu-ray, qui contiennent un dossier BDMV, peuvent être ajoutées.</translation>
+    </message>
+    <message>
+        <source>&quot;%1&quot; is encrypted (AACS), as the disc is when sold. tsMuxeR can only read a decrypted copy of a disc.</source>
+        <translation>« %1 » est chiffrée (AACS), comme le disque du commerce. tsMuxeR ne peut lire qu&apos;une copie déchiffrée d&apos;un disque.</translation>
+    </message>
+    <message>
+        <source>Several playlists of &quot;%1&quot; are long enough to be the film.
+The longest one is usually the film. Which one should be added?</source>
+        <translation>Plusieurs listes de lecture de « %1 » sont assez longues pour être le film.
+La plus longue est en général le film. Laquelle faut-il ajouter ?</translation>
+    </message>
+    <message numerus="yes">
+        <source>%1 - %2 - %n clip(s)</source>
+        <translation>
+            <numerusform>%1 - %2 - %n clip</numerusform>
+            <numerusform>%1 - %2 - %n clips</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Add to queue</source>
+        <translation>Ajouter à la file</translation>
+    </message>
+    <message>
+        <source>Queue...</source>
+        <translation>File d&apos;attente...</translation>
+    </message>
+    <message>
+        <source>Mux queue</source>
+        <translation>File d&apos;attente</translation>
+    </message>
+    <message>
+        <source>The output &quot;%1&quot; is already waiting in the queue.</source>
+        <translation>La sortie « %1 » est déjà dans la file d&apos;attente.</translation>
+    </message>
+    <message>
+        <source>The mux queue is still running. Stop it and quit?</source>
+        <translation>La file d&apos;attente est en cours. L&apos;arrêter et quitter ?</translation>
+    </message>
+    <message>
+        <source>Use the input file name for the output</source>
+        <translation>Utiliser le nom du fichier d&apos;entrée pour la sortie</translation>
+    </message>
+    <message>
+        <source>Name the output file, ISO or Blu-ray folder after the first input file</source>
+        <translation>Nomme le fichier, l&apos;ISO ou le dossier Blu-ray de sortie d&apos;après le premier fichier d&apos;entrée</translation>
+    </message>
+    <message>
+        <source>MediaInfo not found</source>
+        <translation>MediaInfo introuvable</translation>
+    </message>
+    <message>
+        <source>MediaInfo was not found on this computer. Please select MediaInfo.exe.</source>
+        <translation>MediaInfo n&apos;a pas été trouvé sur cet ordinateur. Veuillez sélectionner MediaInfo.exe.</translation>
+    </message>
+    <message>
+        <source>Select MediaInfo</source>
+        <translation>Sélectionner MediaInfo</translation>
+    </message>
+    <message>
+        <source>MediaInfo (MediaInfo.exe);;Programs (*.exe)</source>
+        <translation>MediaInfo (MediaInfo.exe);;Programmes (*.exe)</translation>
+    </message>
+    <message>
+        <source>MediaInfo</source>
+        <translation>MediaInfo</translation>
+    </message>
+    <message>
+        <source>Can&apos;t start &quot;%1&quot;</source>
+        <translation>Impossible de lancer « %1 »</translation>
+    </message>
+    <message>
+        <source>Open in MediaInfo</source>
+        <translation>Ouvrir dans MediaInfo</translation>
+    </message>
+    <message>
+        <source>Show in folder</source>
+        <translation>Afficher dans le dossier</translation>
+    </message>
+    <message>
+        <source>Add folder</source>
+        <translation>Ajouter dossier</translation>
+    </message>
+    <message>
+        <source>Add every MKV file of a folder and its subfolders to the mux queue, one job per file, with the current output settings</source>
+        <translation>Ajoute à la file d&apos;attente tous les fichiers MKV d&apos;un dossier et de ses sous-dossiers, une tâche par fichier, avec les réglages de sortie actuels</translation>
+    </message>
+    <message>
+        <source>Select a folder to scan for MKV and ISO files</source>
+        <translation>Choisir un dossier à analyser (fichiers MKV et ISO)</translation>
+    </message>
+    <message>
+        <source>No MKV or ISO file found in &quot;%1&quot; and its subfolders.</source>
+        <translation>Aucun fichier MKV ou ISO trouvé dans « %1 » et ses sous-dossiers.</translation>
+    </message>
+    <message>
+        <source>Add folder to the queue</source>
+        <translation>Ajouter un dossier à la file</translation>
+    </message>
+    <message>
+        <source>%1 MKV or Blu-ray ISO files found.
+
+Each file will be added to the mux queue as &quot;%2&quot;, with all its tracks and the current options, and named after the source file. From a disc image, the longest playlist is taken, and the discs made by tsMuxeR (earlier conversions) are left out.
+The files currently loaded will be removed from the input list.
+
+Continue?</source>
+        <translation>%1 fichiers MKV ou ISO Blu-ray trouvés.
+
+Chaque fichier sera ajouté à la file d&apos;attente en « %2 », avec toutes ses pistes et les options actuelles, et nommé d&apos;après le fichier source. Pour une image ISO, la playlist la plus longue est prise, et les disques créés par tsMuxeR (conversions précédentes) sont ignorés.
+Les fichiers actuellement chargés seront retirés de la liste d&apos;entrée.
+
+Continuer ?</translation>
+    </message>
+    <message>
+        <source>Analyzing files...</source>
+        <translation>Analyse des fichiers…</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Analyzing %1 / %2
+%3</source>
+        <translation>Analyse %1 / %2
+%3</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n file(s) added to the queue.</source>
+        <translation>
+            <numerusform>%n fichier ajouté à la file.</numerusform>
+            <numerusform>%n fichiers ajoutés à la file.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Already converted (output exists), skipped:</source>
+        <translation>Déjà converti (la sortie existe), ignoré :</translation>
+    </message>
+    <message>
+        <source>Not recognized, skipped:</source>
+        <translation>Non reconnu, ignoré :</translation>
+    </message>
+</context>
+<context>
+    <name>EngineLog</name>
+    <message>
+        <source>Peak bitrate %1 Mbit/s (%2 % of the packets above the player limit): may stutter on a standalone player. Set the maximum bitrate to 109000 kbit/s.</source>
+        <translation>Débit de pointe %1 Mbit/s (%2 % des paquets au-dessus de la limite des lecteurs) : risque de saccades sur un lecteur de salon. Limitez le débit maximal à 109000 kbit/s.</translation>
+    </message>
+    <message>
+        <source>Bitrate limited to %1 kbit/s: %2 of %3 pictures arrive up to %4 s late, the video peaks are above the limit. A player may stutter there; only a re-encode avoids it.</source>
+        <translation>Débit limité à %1 kbit/s : %2 images sur %3 arrivent jusqu&apos;à %4 s en retard, les pointes de la vidéo dépassent la limite. Un lecteur peut saccader à ces endroits ; seul un réencodage l&apos;évite.</translation>
+    </message>
+    <message>
+        <source>TrueHD track without AC3 core: a Blu-ray player will not play it. Use an AC3 track instead.</source>
+        <translation>Piste TrueHD sans noyau AC3 : un lecteur Blu-ray ne la lira pas. Utilisez plutôt une piste AC3.</translation>
+    </message>
+    <message>
+        <source>AAC audio is not standard on Blu-ray: the disc may not play.</source>
+        <translation>Audio AAC non standard sur Blu-ray : le disque risque de ne pas être lu.</translation>
+    </message>
+    <message>
+        <source>Dolby Vision BL+EL kept in a single track: a Blu-ray player will not use it. Check &quot;Split Dolby Vision layers&quot;.</source>
+        <translation>Dolby Vision BL+EL laissé en une seule piste : un lecteur Blu-ray ne l&apos;utilisera pas. Cochez « Séparer les couches Dolby Vision ».</translation>
+    </message>
+    <message>
+        <source>Video height below 1080 lines: not standard for a UHD Blu-ray.</source>
+        <translation>Hauteur vidéo inférieure à 1080 lignes : non standard pour un UHD Blu-ray.</translation>
+    </message>
+    <message>
+        <source>Dolby Vision: no enhancement layer found in track %1.</source>
+        <translation>Dolby Vision : aucune couche d&apos;amélioration trouvée dans la piste %1.</translation>
+    </message>
+    <message>
+        <source>Dolby Vision: %1 frames without RPU metadata (incomplete source file?).</source>
+        <translation>Dolby Vision : %1 images sans métadonnées RPU (fichier source incomplet ?).</translation>
+    </message>
+    <message>
+        <source>Dolby Vision: %1 frames with more than one RPU.</source>
+        <translation>Dolby Vision : %1 images avec plusieurs RPU.</translation>
+    </message>
+    <message>
+        <source>Dolby Vision profile 7: splitting track %1 into base layer (BL) and enhancement layer with its metadata (EL)</source>
+        <translation>Dolby Vision profil 7 : séparation de la piste %1 en couche de base (BL) et couche d&apos;amélioration avec ses métadonnées (EL)</translation>
+    </message>
+    <message>
+        <source>   Font %1 not installed: using %2 for the subtitles</source>
+        <translation>   Police %1 absente : %2 utilisée pour les sous-titres</translation>
+    </message>
+    <message>
+        <source>Step: muxing streams</source>
+        <translation>Étape : multiplexage des flux</translation>
+    </message>
+    <message>
+        <source>(Dolby Vision layer: EL + RPU metadata)</source>
+        <translation>(couche Dolby Vision : EL + métadonnées RPU)</translation>
+    </message>
+    <message>
+        <source>(secondary)</source>
+        <translation>(secondaire)</translation>
+    </message>
+    <message>
+        <source>Output streams:</source>
+        <translation>Flux de sortie :</translation>
+    </message>
+    <message>
+        <source>Dolby Vision: %1 frames, %2 RPU metadata, base layer %3 MB, enhancement layer %4 MB</source>
+        <translation>Dolby Vision : %1 images, %2 métadonnées RPU, couche de base %3 Mo, couche d&apos;amélioration %4 Mo</translation>
+    </message>
+    <message>
+        <source>one RPU per frame: Dolby Vision metadata complete</source>
+        <translation>une métadonnée RPU par image : Dolby Vision complet</translation>
+    </message>
+    <message>
+        <source>   Frame rate detected: %1 fps</source>
+        <translation>   Cadence détectée : %1 images/s</translation>
+    </message>
+    <message>
+        <source>   %1 video frames processed</source>
+        <translation>   %1 images vidéo traitées</translation>
+    </message>
+    <message>
+        <source>Step: writing the last data</source>
+        <translation>Étape : écriture des dernières données</translation>
+    </message>
+    <message>
+        <source>Step: creating the Blu-ray clip index (CLPI)</source>
+        <translation>Étape : création de l&apos;index des clips Blu-ray (CLPI)</translation>
+    </message>
+    <message>
+        <source>Step: creating the AVCHD clip index (CLPI)</source>
+        <translation>Étape : création de l&apos;index des clips AVCHD (CLPI)</translation>
+    </message>
+    <message>
+        <source>Step: creating the playlist (MPLS)</source>
+        <translation>Étape : création de la playlist (MPLS)</translation>
+    </message>
+    <message>
+        <source>Step: adding the blank playlist</source>
+        <translation>Étape : ajout de la playlist vide</translation>
+    </message>
+    <message>
+        <source>Step: finalizing the ISO image</source>
+        <translation>Étape : finalisation de l&apos;image ISO</translation>
+    </message>
+    <message>
+        <source>Completed successfully</source>
+        <translation>Terminé avec succès</translation>
+    </message>
+    <message>
+        <source>Summary</source>
+        <translation>Résumé</translation>
+    </message>
+    <message>
+        <source>Failed with error code %1 after %2</source>
+        <translation>Échec avec le code d&apos;erreur %1 après %2</translation>
+    </message>
+    <message>
+        <source>Output: %1</source>
+        <translation>Sortie : %1</translation>
+    </message>
+    <message>
+        <source>Size: %1</source>
+        <translation>Taille : %1</translation>
+    </message>
+    <message>
+        <source>Duration: %1</source>
+        <translation>Durée : %1</translation>
+    </message>
+    <message>
+        <source>Average bitrate: %1 Mb/s</source>
+        <translation>Débit moyen : %1 Mb/s</translation>
+    </message>
+    <message>
+        <source>Processing time: %1</source>
+        <translation>Temps de traitement : %1</translation>
+    </message>
+    <message>
+        <source> (x%1 real time)</source>
+        <translation> (×%1 le temps réel)</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n warning(s), see above</source>
+        <translation>
+            <numerusform>%n avertissement, voir ci-dessus</numerusform>
+            <numerusform>%n avertissements, voir ci-dessus</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>DiscExplorer</name>
+    <message>
+        <source>stereo + multi-channel</source>
+        <translation>stéréo + multicanal</translation>
+    </message>
+    <message>
+        <source>multi-channel</source>
+        <translation>multicanal</translation>
+    </message>
+    <message>
+        <source>stereo</source>
+        <translation>stéréo</translation>
+    </message>
+    <message>
+        <source>mono</source>
+        <translation>mono</translation>
+    </message>
+    <message>
+        <source>secondary</source>
+        <translation>secondaire</translation>
+    </message>
+    <message>
+        <source>%1 GB</source>
+        <translation>%1 Go</translation>
+    </message>
+    <message>
+        <source>%1 MB</source>
+        <translation>%1 Mo</translation>
+    </message>
+    <message>
+        <source>Disc explorer - %1</source>
+        <translation>Explorateur de disque - %1</translation>
+    </message>
+    <message>
+        <source>Also show short playlists and copies</source>
+        <translation>Afficher aussi les playlists courtes et les copies</translation>
+    </message>
+    <message>
+        <source>Playlist</source>
+        <translation>Playlist</translation>
+    </message>
+    <message>
+        <source>Duration</source>
+        <translation>Durée</translation>
+    </message>
+    <message>
+        <source>Clips</source>
+        <translation>Clips</translation>
+    </message>
+    <message>
+        <source>Size</source>
+        <translation>Taille</translation>
+    </message>
+    <message>
+        <source>Chapters</source>
+        <translation>Chapitres</translation>
+    </message>
+    <message>
+        <source>Notes</source>
+        <translation>Particularités</translation>
+    </message>
+    <message>
+        <source>PID</source>
+        <translation>PID</translation>
+    </message>
+    <message>
+        <source>Type</source>
+        <translation>Type</translation>
+    </message>
+    <message>
+        <source>Codec</source>
+        <translation>Codec</translation>
+    </message>
+    <message>
+        <source>Language</source>
+        <translation>Langue</translation>
+    </message>
+    <message>
+        <source>Details</source>
+        <translation>Détails</translation>
+    </message>
+    <message>
+        <source>Clip</source>
+        <translation>Clip</translation>
+    </message>
+    <message>
+        <source>Tracks</source>
+        <translation>Pistes</translation>
+    </message>
+    <message>
+        <source>Load this playlist</source>
+        <translation>Charger cette playlist</translation>
+    </message>
+    <message>
+        <source>Replaces the input files with the selected playlist, its tracks shown as for any file.</source>
+        <translation>Remplace les fichiers d&apos;entrée par la playlist sélectionnée, avec ses pistes comme pour tout fichier.</translation>
+    </message>
+    <message>
+        <source>Add selection to the queue</source>
+        <translation>Ajouter la sélection à la file</translation>
+    </message>
+    <message>
+        <source>Each selected playlist becomes a job of the mux queue, with the current output type and options, named after the disc and the playlist. For the episodes of a series, for instance.</source>
+        <translation>Chaque playlist sélectionnée devient une tâche de la file d&apos;attente, avec le type de sortie et les options actuels, nommée d&apos;après le disque et la playlist. Pour les épisodes d&apos;une série, par exemple.</translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation>Fermer</translation>
+    </message>
+    <message>
+        <source>Disc explorer</source>
+        <translation>Explorateur de disque</translation>
+    </message>
+    <message>
+        <source>No Blu-ray playlist was found in &quot;%1&quot;.</source>
+        <translation>Aucune playlist Blu-ray dans « %1 ».</translation>
+    </message>
+    <message numerus="yes">
+        <source>&lt;b&gt;%1&lt;/b&gt; - %n playlist(s). The longest one, selected, is usually the film.</source>
+        <translation>
+            <numerusform>&lt;b&gt;%1&lt;/b&gt; - %n playlist. La plus longue, sélectionnée, est en général le film.</numerusform>
+            <numerusform>&lt;b&gt;%1&lt;/b&gt; - %n playlists. La plus longue, sélectionnée, est en général le film.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>This disc is encrypted (AACS): tsMuxeR can only read a decrypted copy.</source>
+        <translation>Ce disque est chiffré (AACS) : tsMuxeR ne peut lire qu&apos;une copie déchiffrée.</translation>
+    </message>
+    <message>
+        <source>Dolby Vision</source>
+        <translation>Dolby Vision</translation>
+    </message>
+    <message>
+        <source>3D</source>
+        <translation>3D</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n angle(s)</source>
+        <translation>
+            <numerusform>%n angle</numerusform>
+            <numerusform>%n angles</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>+%n identical copy(ies)</source>
+        <translation>
+            <numerusform>+%n copie identique</numerusform>
+            <numerusform>+%n copies identiques</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>copy of a playlist above</source>
+        <translation>copie d&apos;une playlist plus haut</translation>
+    </message>
+    <message numerus="yes">
+        <source>Also show short playlists and copies (%n hidden)</source>
+        <translation>
+            <numerusform>Afficher aussi les playlists courtes et les copies (%n masquée)</numerusform>
+            <numerusform>Afficher aussi les playlists courtes et les copies (%n masquées)</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Dolby Vision enhancement layer</source>
+        <translation>couche d&apos;amélioration Dolby Vision</translation>
+    </message>
+    <message>
+        <source>Video</source>
+        <translation>Vidéo</translation>
+    </message>
+    <message>
+        <source>Audio</source>
+        <translation>Audio</translation>
+    </message>
+    <message>
+        <source>Subtitles</source>
+        <translation>Sous-titres</translation>
+    </message>
+    <message>
+        <source>Other</source>
+        <translation>Autre</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n playlist(s) selected: %1, %2</source>
+        <translation>
+            <numerusform>%n playlist sélectionnée : %1, %2</numerusform>
+            <numerusform>%n playlists sélectionnées : %1, %2</numerusform>
+        </translation>
     </message>
 </context>
 </TS>

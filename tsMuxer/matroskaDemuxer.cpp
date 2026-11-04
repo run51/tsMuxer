@@ -3518,6 +3518,7 @@ std::map<uint64_t, std::vector<AbstractDemuxer::SourceTrackTag>> MatroskaDemuxer
         SourceTrackTag tag;
         std::vector<std::pair<std::string, std::vector<uint8_t>>> simple;  // name, the whole element
         std::string statistics;
+        std::string numberOfBytes;
         size_t j = b;
         uint32_t cid = 0;
         size_t cb = 0, ce = 0;
@@ -3562,10 +3563,14 @@ std::map<uint64_t, std::vector<AbstractDemuxer::SourceTrackTag>> MatroskaDemuxer
                                      d.begin() + static_cast<std::ptrdiff_t>(se));
                 if (name == "_STATISTICS_TAGS")
                     statistics = " " + value + " ";
+                else if (name == "NUMBER_OF_BYTES")
+                    numberOfBytes = value;
             }
         }
         if (trackUids.empty() || aboutOther)
             continue;
+        if (!numberOfBytes.empty())
+            for (const uint64_t uid : trackUids) m_trackBytes[uid] = std::strtoull(numberOfBytes.c_str(), nullptr, 10);
         // The SimpleTags again, now that the list of statistics tags is known, each as it stands
         j = b;
         size_t start = j;
@@ -3594,6 +3599,13 @@ std::map<uint64_t, std::vector<AbstractDemuxer::SourceTrackTag>> MatroskaDemuxer
         for (const uint64_t uid : trackUids) out[uid].push_back(tag);
     }
     return out;
+}
+
+std::map<uint64_t, uint64_t> MatroskaDemuxer::getTrackByteCounts()
+{
+    m_trackBytes.clear();
+    getTrackTags();
+    return m_trackBytes;
 }
 
 void MatroskaDemuxer::loadAttachments(const std::string& fileName)

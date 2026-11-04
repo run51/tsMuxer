@@ -77,7 +77,13 @@ endif()
 if(TSMUXER_STATIC_BUILD AND UNIX)
   list(INSERT CMAKE_FIND_LIBRARY_SUFFIXES 0 .a)
   list(REMOVE_DUPLICATES CMAKE_FIND_LIBRARY_SUFFIXES)
+elseif(TSMUXER_STATIC_BUILD AND MINGW)
+  # MinGW ships both import (.dll.a) and static (.a) libraries; prefer static
+  # so the executable has no runtime DLL dependencies.
+  set(CMAKE_FIND_LIBRARY_SUFFIXES .a)
 endif()
+
+set(TSMUXER_UNIFIED FALSE CACHE BOOL "Build GUI and muxer as one tsMuxeR executable")
 
 set(TSMUXER_COVERAGE FALSE CACHE BOOL "Enable collecting coverage information")
 if(${TSMUXER_COVERAGE})
@@ -107,6 +113,6 @@ if(NOT DEFINED TSMUXER_GUI)
   endif()
 endif()
 
-if(TSMUXER_GUI)
+if(TSMUXER_GUI OR TSMUXER_UNIFIED)
   add_subdirectory(tsMuxerGUI)
 endif()
