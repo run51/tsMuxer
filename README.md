@@ -1,6 +1,8 @@
 # tsMuxer
 
-> **Note:** This is a fork of [jaminmc/tsMuxer](https://github.com/jaminmc/tsMuxer) (itself a modernized C++20/Qt6 fork of [justdan96/tsMuxer](https://github.com/justdan96/tsMuxer)). It adds multi-layer disc authoring: a menu-preserving BDMV to ISO mode, a layer-break guard band for BD-R/RE DL and BD-R XL media, a fit-to-disc capacity guard, and a layer-break calculator in the GUI. See [DISC_AUTHORING.md](docs/DISC_AUTHORING.md) (also available [auf Deutsch](docs/DISC_AUTHORING_DE.md) and [日本語で](docs/DISC_AUTHORING_JA.md)).
+> **This fork (run51/tsMuxer)** is based on [teaching-droid/tsMuxer](https://github.com/teaching-droid/tsMuxer) 2.20.0. It is built as a single `tsMuxeR.exe` for Windows and as a Docker image, and adds a mux queue, Blu-ray ISO input, a disc explorer, automatic track selection by language, an automatic TrueHD + AC-3 merge and an output named after the source. See the [releases](https://github.com/run51/tsMuxer/releases), [INSTALLATION.md](docs/INSTALLATION.md) and [docker/INSTALL_DOCKER.md](docker/INSTALL_DOCKER.md). The rest of this README is the original project's.
+
+> **Note:** teaching-droid/tsMuxer is a fork of [jaminmc/tsMuxer](https://github.com/jaminmc/tsMuxer) (itself a modernized C++20/Qt6 fork of [justdan96/tsMuxer](https://github.com/justdan96/tsMuxer)). It adds multi-layer disc authoring: a menu-preserving BDMV to ISO mode, a layer-break guard band for BD-R/RE DL and BD-R XL media, a fit-to-disc capacity guard, and a layer-break calculator in the GUI. See [DISC_AUTHORING.md](docs/DISC_AUTHORING.md) (also available [auf Deutsch](docs/DISC_AUTHORING_DE.md) and [日本語で](docs/DISC_AUTHORING_JA.md)).
 
 ## Vision
 
@@ -88,17 +90,17 @@ tsMuxer is written in C++20. It can be compiled for Windows, Linux and Mac.
   [qt6windows7](https://github.com/crystalidea/qt6windows7) patches, and build Qt from source with
   Ninja (the Visual Studio generator cannot build Qt). See [COMPILING.md](docs/COMPILING.md).
 
-**Windows 7 Users:** the Windows release binaries are built against Qt 6.8 with the
-[qt6windows7](https://github.com/crystalidea/qt6windows7) compatibility patches, so the
-standard 32-bit and 64-bit builds run on Windows 7 and newer. No separate build is needed.
+**Windows 7 Users:** the original project's Windows binaries are built against Qt 6.8 with the
+[qt6windows7](https://github.com/crystalidea/qt6windows7) compatibility patches and run on
+Windows 7 and newer. This fork's `tsMuxeR.exe` is built with Qt 6.12 and needs Windows 10 or 11.
 
 ## Downloads
 
-Ready-made binaries are produced by the build workflows: open the Actions tab, pick the
-newest "Build for Windows 64-bit" (or 32-bit / Linux / Mac) run and download its artifact.
-The Windows zip is a self-contained folder: `tsMuxeR.exe` (command line), `tsMuxerGUI.exe`,
-and the Qt and runtime DLLs they need. Unzip it and run; nothing needs installing. Tagged
-versions additionally appear on the Releases page.
+This fork's builds are on its [releases](https://github.com/run51/tsMuxer/releases) page:
+`tsMuxeR.exe`, a single file for 64-bit Windows with nothing to install, and `tsmuxer-dv.tar`,
+a Docker image. There is no Linux or macOS program; on Linux, use the Docker image. The
+original project's builds, Linux and macOS included, are on the
+[teaching-droid/tsMuxer releases](https://github.com/teaching-droid/tsMuxer/releases) page.
 
 ## History
 
