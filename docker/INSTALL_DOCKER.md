@@ -8,10 +8,13 @@ It runs in a web browser at `http://<host>:5800`.
 
 ## Requirements
 
-- A host with an **x86-64** (Intel or AMD) processor running Docker: a Linux server, Docker
-  Desktop on Windows or macOS, or a NAS (Synology "+" models, QNAP, Unraid…).
-  ARM hosts (Raspberry Pi, Synology "j" series, Apple silicon without emulation) are not
-  supported: the image is built for x86-64.
+- A machine with an **x86-64** (Intel or AMD) processor running Docker: a NAS (Synology "+"
+  models, QNAP, Unraid…), a server, or Docker Desktop on Windows.
+  ARM machines (Raspberry Pi, Synology "j" series…) are not supported: the image is built for
+  x86-64.
+- This fork has two builds only: `tsMuxeR.exe` for Windows and this Docker image. There is no
+  native Linux or macOS program; the image holds its own Linux system, so on a Linux machine
+  it is the way to run tsMuxeR.
 - The image file **`tsmuxer-dv.tar`** (from the release page, ~250 MB), or build it yourself
   (see the end of this guide).
 
@@ -23,7 +26,7 @@ The container uses two folders of the host:
 - `/storage`: your films. tsMuxeR reads its sources and writes its outputs there.
 
 Files created by tsMuxeR belong to the user given by `USER_ID` and `GROUP_ID`: use the ids of
-the host user who owns the films (`id <user>` on Linux; on a Synology NAS the first
+the host user who owns the films (`id <user>` in a terminal on the host; on a Synology NAS the first
 administrator is often `1026`, group `users` = `100`).
 
 ## Install with docker run
