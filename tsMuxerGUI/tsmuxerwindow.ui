@@ -734,6 +734,16 @@
                  </widget>
                 </item>
                 <item>
+                 <widget class="QPushButton" name="previewDelayBtn">
+                  <property name="text">
+                   <string>Preview...</string>
+                  </property>
+                  <property name="toolTip">
+                   <string>Plays the film in mpv with this audio track, to set the delay by ear and eye: the Delay field and mpv follow each other. In mpv, + and - change the delay by 10 ms, Ctrl + and Ctrl - by 100 ms.</string>
+                  </property>
+                 </widget>
+                </item>
+                <item>
                  <widget class="QLabel" name="mergeAc3TrackLabel">
                   <property name="text">
                    <string>Merge AC-3 track:</string>

@@ -30,6 +30,7 @@ class QCheckBox;
 
 class MuxForm;
 class MuxQueue;
+class MpvPreview;
 class QProgressDialog;
 namespace Ui
 {
@@ -165,6 +166,21 @@ class TsMuxerWindow : public QWidget
     void finishBatch();
     void onInputFilesContextMenu(const QPoint& pos);
     void openInMediaInfo(const QString& fileName);
+
+    // The audio delay preview (Windows): the film plays in mpv with the selected audio track, and the Delay field and
+    // mpv's audio delay follow each other. The previewed track is found again by its key, so it stays linked while
+    // another track is selected, moved, or the list changes.
+    void onPreviewDelayClick();
+    void onPreviewDelayChangedInMpv(int mpvDelayMs);
+    void previewDelayEdited(const QtvCodecInfo* codecInfo);
+    void updatePreviewTitle();
+    [[nodiscard]] QString previewTitle(const QtvCodecInfo* codecInfo) const;
+    void updatePreviewButton(const QtvCodecInfo* codecInfo);
+    [[nodiscard]] static QString previewTrackKey(const QtvCodecInfo* codecInfo);
+    QtvCodecInfo* previewedCodec();
+    MpvPreview* m_preview = nullptr;
+    QString m_previewKey;
+    int m_previewNative = 0;
     // The playlist to add from a Blu-ray disc image, read in place by the engine. Empty when there is none
     // to add: the image is encrypted, holds no playlist, or the choice was cancelled.
     QString playlistInDiscImage(const QString& image);

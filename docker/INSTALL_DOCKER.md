@@ -125,6 +125,9 @@ Open `http://<host>:5800` in a browser.
   fits on (BD-25, 50, 66 or 100). Available for MKV sources (mkvmerge, MakeMKV…).
 - **The queue is kept** in `/config`: after a restart of the container or the host, the pending
   jobs come back (an interrupted job starts over). Just start the queue again.
+- The audio delay preview (**Preview...** beside a track's delay) is in the Windows program only: a
+  picture sent to a web browser cannot be judged for lip sync. Set the delay on Windows, or check
+  it on a short output played on the TV.
 - Right-click an input file → **Open in MediaInfo**. MediaInfo opens full screen; close it with
   **File > Exit** to get back to tsMuxeR (MediaInfo's language is set in
   *Options > Preferences*).

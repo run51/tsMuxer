@@ -90,6 +90,17 @@ set(tsmuxer_gui_sources
   ${CMAKE_CURRENT_BINARY_DIR}/${lang_qrc}
 )
 
+# The audio delay preview plays the film in mpv and drives it over its IPC pipe (QLocalSocket, in Qt Network).
+# Windows only: the Docker image has no player, and a picture sent to a web browser cannot be judged for lip sync.
+if(WIN32)
+  find_package(Qt6 QUIET COMPONENTS Network)
+  if(Qt6Network_FOUND)
+    list(APPEND tsmuxer_gui_sources mpvPreview.cpp)
+    list(APPEND tsmuxer_gui_libs Qt6::Network)
+    set(TSMUXER_MPV_PREVIEW TRUE)
+  endif()
+endif()
+
 if (TSMUXER_UNIFIED)
   # one executable: the GUI, which also runs the muxer engine on the command line
   set(tsmuxer_gui_target tsMuxeR)
@@ -183,6 +194,10 @@ endif()
 # build that deliberately leaves Multimedia out still takes the beep path.
 if(TSMUXER_HAVE_MULTIMEDIA)
   target_compile_definitions(${tsmuxer_gui_target} PRIVATE QT_MULTIMEDIA_LIB=1)
+endif()
+
+if(TSMUXER_MPV_PREVIEW)
+  target_compile_definitions(${tsmuxer_gui_target} PRIVATE TSMUXER_MPV_PREVIEW=1)
 endif()
 
 # On macOS, ensure tsMuxeR CLI is built before the GUI (for the copy step)

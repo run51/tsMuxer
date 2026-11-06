@@ -4717,6 +4717,62 @@ La plus longue est en général le film. Laquelle faut-il ajouter ?</translation
         <translation>Impossible de lancer « %1 »</translation>
     </message>
     <message>
+        <source>Preview...</source>
+        <translation>Aperçu...</translation>
+    </message>
+    <message>
+        <source>Plays the film in mpv with this audio track, to set the delay by ear and eye: the Delay field and mpv follow each other. In mpv, + and - change the delay by 10 ms, Ctrl + and Ctrl - by 100 ms.</source>
+        <translation>Lit le film dans mpv avec cette piste audio, pour régler le délai à l&apos;oreille et à l&apos;œil : le champ Délai et mpv se suivent. Dans mpv, + et - changent le délai de 10 ms, Ctrl + et Ctrl - de 100 ms.</translation>
+    </message>
+    <message>
+        <source>Delay preview</source>
+        <translation>Aperçu du délai</translation>
+    </message>
+    <message>
+        <source>The preview shows the picture of the film with this audio track. Add the video track first.</source>
+        <translation>L&apos;aperçu montre l&apos;image du film avec cette piste audio. Ajoutez d&apos;abord la piste vidéo.</translation>
+    </message>
+    <message>
+        <source>This audio track comes from another disc than the video. The preview can add an audio track from a file, not from a second disc.</source>
+        <translation>Cette piste audio vient d&apos;un autre disque que la vidéo. L&apos;aperçu peut ajouter une piste audio venant d&apos;un fichier, pas d&apos;un second disque.</translation>
+    </message>
+    <message>
+        <source>mpv not found</source>
+        <translation>mpv introuvable</translation>
+    </message>
+    <message>
+        <source>The preview plays the film in mpv, a free video player, which was not found on this computer.
+
+Get it from https://mpv.io/installation/ : the Windows build is a folder to unpack, for example into %1. Then select mpv.exe.</source>
+        <translation>L&apos;aperçu lit le film dans mpv, un lecteur vidéo gratuit, qui n&apos;a pas été trouvé sur cet ordinateur.
+
+Téléchargez-le sur https://mpv.io/installation/ : la version Windows est un dossier à décompresser, par exemple dans %1. Sélectionnez ensuite mpv.exe.</translation>
+    </message>
+    <message>
+        <source>Select mpv</source>
+        <translation>Sélectionner mpv</translation>
+    </message>
+    <message>
+        <source>mpv (mpv.exe);;Programs (*.exe)</source>
+        <translation>mpv (mpv.exe);;Programmes (*.exe)</translation>
+    </message>
+    <message>
+        <source>mpv did not find this audio track in the file and plays another one. Check which track you hear before trusting the delay.</source>
+        <translation>mpv n&apos;a pas trouvé cette piste audio dans le fichier et en lit une autre. Vérifiez quelle piste vous entendez avant de vous fier au délai.</translation>
+    </message>
+    <message>
+        <source>Delay: + and - change it by 10 ms, Ctrl + and Ctrl - by 100 ms. tsMuxeR&apos;s Delay field follows.</source>
+        <translation>Délai : + et - le changent de 10 ms, Ctrl + et Ctrl - de 100 ms. Le champ Délai de tsMuxeR suit.</translation>
+    </message>
+    <message>
+        <source>tsMuxeR preview - %1 - delay %2 ms</source>
+        <translation>Aperçu tsMuxeR - %1 - délai %2 ms</translation>
+    </message>
+    <message>
+        <source>Delay: %1 ms</source>
+        <translation>Délai : %1 ms</translation>
+    </message>
+    <message>
         <source>Open in MediaInfo</source>
         <translation>Ouvrir dans MediaInfo</translation>
     </message>

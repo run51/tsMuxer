@@ -26,6 +26,13 @@ MediaInfo is not included in the Windows build. To use **Open in MediaInfo**, in
 [MediaInfo](https://mediaarea.net/en/MediaInfo); the first time, tsMuxeR asks where it is if it
 does not find it.
 
+The **Preview...** button beside an audio track's delay plays the film in
+[mpv](https://mpv.io/installation/), which is not included either. Its Windows build is a folder to
+unpack; tsMuxeR finds it in `%LOCALAPPDATA%\Programs\mpv`, `C:\Program Files\mpv`, beside
+`tsMuxeR.exe` (in an `mpv` folder), through the `PATH`, or asks where it is. While mpv plays, the
+Delay field and mpv's audio delay follow each other: `+` and `-` in mpv change it by 10 ms, Ctrl `+`
+and Ctrl `-` by 100 ms. Judge the sync on a wired output: Bluetooth headphones add their own delay.
+
 ### If your antivirus flags it
 
 Some products report Windows binaries like this one as something like `Win64:Evo-gen`. A name of

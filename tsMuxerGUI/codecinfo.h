@@ -23,6 +23,10 @@ struct QtvCodecInfo
     QString descr;
     QString lang;
     int delay = 0;
+    // The delay the source itself gives the track, against the video of its file, as tsMuxeR listed it. A player
+    // applies it by itself, so the audio delay preview gives mpv the delay minus this. 0 for a track that is a file of
+    // its own (an elementary stream), whose listed delay can only come from the file name.
+    int nativeDelay = 0;
     int subTrack = 0;
     bool dtsDownconvert = false;
     // For a disc TrueHD track (A_AC3 reported as TRUE-HD, which carries an AC-3 core beside the

@@ -68,6 +68,9 @@
 #include "muxForm.h"
 #include "muxQueue.h"
 #include "tsMuxerProcess.h"
+#ifdef TSMUXER_MPV_PREVIEW
+#include "mpvPreview.h"
+#endif
 
 namespace QtCompat
 {
@@ -940,6 +943,7 @@ TsMuxerWindow::TsMuxerWindow()
     connect(ui->spinBoxPipOffsetV, spinBoxValueChanged, this, &TsMuxerWindow::onSavedParamChanged);
     connect(ui->checkBoxSound, &QCheckBox::checkStateChanged, this, &TsMuxerWindow::onSavedParamChanged);
     connect(ui->editDelay, spinBoxValueChanged, this, &TsMuxerWindow::onEditDelayChanged);
+    connect(ui->previewDelayBtn, &QPushButton::clicked, this, &TsMuxerWindow::onPreviewDelayClick);
     connect(ui->muxTimeEdit, &QTimeEdit::timeChanged, this, &TsMuxerWindow::updateMuxTime1);
     connect(ui->muxTimeClock, spinBoxValueChanged, this, &TsMuxerWindow::updateMuxTime2);
     connect(ui->muxTimeEdit, &QTimeEdit::editingFinished, this, &TsMuxerWindow::snapMuxTimeToBdMinimum);
@@ -3244,6 +3248,8 @@ void TsMuxerWindow::onTsMuxerCodecInfoReceived()
         {
             tmpStr = QtCompat::strMid(procStdOutput[i], QString("Stream delay: ").length());
             codecInfo->delay = tmpStr.toInt();
+            if (codecInfo->trackID != 0)
+                codecInfo->nativeDelay = codecInfo->delay;
         }
         p = procStdOutput[i].indexOf("subTrack: ");
         if (p >= 0)
@@ -3916,6 +3922,7 @@ void TsMuxerWindow::onEditDelayChanged(int)
         return;
     codecInfo->delay = ui->editDelay->value();
     updateMetaLines();
+    previewDelayEdited(codecInfo);
 }
 
 void TsMuxerWindow::onPulldownCheckBoxChanged()
@@ -4209,6 +4216,7 @@ void TsMuxerWindow::trackLVItemSelectionChanged()
             ui->secondaryCheckBox->setChecked(codecInfo->isSecondary);
             ui->checkBoxKeepFps->setChecked(codecInfo->bindFps);
             ui->editDelay->setEnabled(!ui->radioButtonDemux->isChecked());
+            updatePreviewButton(codecInfo);
         }
     }
 
@@ -4640,6 +4648,237 @@ void TsMuxerWindow::openInMediaInfo(const QString &fileName)
     }
     if (!QProcess::startDetached(mediaInfo, {QDir::toNativeSeparators(fileName)}))
         QMessageBox::warning(this, tr("MediaInfo"), tr("Can't start \"%1\"").arg(mediaInfo));
+}
+
+#ifdef TSMUXER_MPV_PREVIEW
+// mpv.com is the console front of mpv.exe and opens a console window beside it: mpv.exe is the one to start.
+static QString mpvExe(const QString& path)
+{
+    if (path.endsWith(QLatin1String(".com"), Qt::CaseInsensitive))
+    {
+        const QString exe = path.left(path.size() - 4) + QLatin1String(".exe");
+        if (QFileInfo::exists(exe))
+            return exe;
+    }
+    return path;
+}
+
+static QString findMpv(const QString& configuredPath)
+{
+    if (!configuredPath.isEmpty() && QFileInfo::exists(configuredPath))
+        return mpvExe(configuredPath);
+    // The Windows builds of mpv are a folder to unpack: beside the program that uses it, among the user's programs,
+    // or in Program Files. Its install script registers it under App Paths, and scoop puts it in its own folder.
+    QStringList candidates;
+    const QString appDir = QCoreApplication::applicationDirPath();
+    candidates << appDir + "/mpv/mpv.exe" << appDir + "/mpv.exe";
+    if (const QString local = qEnvironmentVariable("LOCALAPPDATA"); !local.isEmpty())
+        candidates << local + "/Programs/mpv/mpv.exe";
+    for (const char* var : {"ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"})
+        if (const QString dir = qEnvironmentVariable(var); !dir.isEmpty())
+            candidates << dir + "/mpv/mpv.exe";
+    candidates << QDir::homePath() + "/scoop/apps/mpv/current/mpv.exe";
+    for (const char* root : {"HKEY_CURRENT_USER", "HKEY_LOCAL_MACHINE"})
+    {
+        QSettings appPaths(QString(R"(%1\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\mpv.exe)").arg(root),
+                           QSettings::NativeFormat);
+        candidates << appPaths.value(".").toString().remove(QLatin1Char('"'));
+    }
+    for (const QString& candidate : candidates)
+        if (!candidate.isEmpty() && QFileInfo::exists(candidate))
+            return QDir::toNativeSeparators(candidate);
+    return mpvExe(QStandardPaths::findExecutable("mpv"));
+}
+#endif
+
+QString TsMuxerWindow::previewTrackKey(const QtvCodecInfo* codecInfo)
+{
+    return codecInfo->fileList.join('+') + '|' + codecInfo->mplsFiles.join('+') + '|' +
+           QString::number(codecInfo->trackID) + '|' + QString::number(codecInfo->subTrack);
+}
+
+QtvCodecInfo* TsMuxerWindow::previewedCodec()
+{
+    if (m_previewKey.isEmpty())
+        return nullptr;
+    for (int i = 0; i < ui->trackLV->rowCount(); ++i)
+        if (QtvCodecInfo* info = getCodecInfo(i); info && previewTrackKey(info) == m_previewKey)
+            return info;
+    return nullptr;
+}
+
+void TsMuxerWindow::updatePreviewButton(const QtvCodecInfo* codecInfo)
+{
+#ifdef TSMUXER_MPV_PREVIEW
+    ui->previewDelayBtn->setVisible(codecInfo && codecInfo->programName.startsWith(QLatin1String("A_")));
+    ui->previewDelayBtn->setEnabled(ui->editDelay->isEnabled());
+#else
+    Q_UNUSED(codecInfo);
+    ui->previewDelayBtn->setVisible(false);
+#endif
+}
+
+void TsMuxerWindow::onPreviewDelayClick()
+{
+#ifdef TSMUXER_MPV_PREVIEW
+    QtvCodecInfo* audio = getCurrentCodec();
+    if (!audio || !audio->programName.startsWith(QLatin1String("A_")))
+        return;
+    // The picture is that of the first video track ticked for the output, or of the first one listed.
+    QtvCodecInfo* video = nullptr;
+    for (int i = 0; i < ui->trackLV->rowCount(); ++i)
+    {
+        QtvCodecInfo* info = getCodecInfo(i);
+        if (!info || !isVideoCodec(info->displayName))
+            continue;
+        if (!video)
+            video = info;
+        if (ui->trackLV->item(i, 0)->checkState() == Qt::Checked)
+        {
+            video = info;
+            break;
+        }
+    }
+    if (!video)
+    {
+        QMessageBox::information(this, tr("Delay preview"),
+                                 tr("The preview shows the picture of the film with this audio track. Add the video "
+                                    "track first."));
+        return;
+    }
+
+    // Where each track is read from: a Blu-ray playlist, in a folder or an image, or a file.
+    const auto sourceOf = [](const QtvCodecInfo* info) {
+        return unquoteStr(info->mplsFiles.isEmpty() ? info->fileList.value(0) : info->mplsFiles.value(0));
+    };
+    const QString videoSource = sourceOf(video);
+    const QString audioSource = sourceOf(audio);
+    MpvPreview::Source source;
+    if (!video->mplsFiles.isEmpty())
+    {
+        // mpv opens a Blu-ray playlist by its number, in the disc that holds it
+        source.url = QStringLiteral("bd://mpls/%1").arg(QFileInfo(videoSource).completeBaseName().toInt());
+        source.blurayDevice = discRootOf(videoSource);
+    }
+    else
+        source.url = videoSource;
+    if (audioSource != videoSource)
+    {
+        if (!audio->mplsFiles.isEmpty())
+        {
+            QMessageBox::information(this, tr("Delay preview"),
+                                     tr("This audio track comes from another disc than the video. The preview can add "
+                                        "an audio track from a file, not from a second disc."));
+            return;
+        }
+        source.audioFile = audioSource;
+    }
+    source.audioSrcId = audio->trackID;
+
+    QString mpv = findMpv(settings->value("mpvPath").toString());
+    if (mpv.isEmpty())
+    {
+        QMessageBox::information(
+            this, tr("mpv not found"),
+            tr("The preview plays the film in mpv, a free video player, which was not found on this computer.\n\n"
+               "Get it from https://mpv.io/installation/ : the Windows build is a folder to unpack, for example "
+               "into %1. Then select mpv.exe.")
+                .arg(QDir::toNativeSeparators(qEnvironmentVariable("LOCALAPPDATA") + "/Programs/mpv")));
+        mpv = QFileDialog::getOpenFileName(this, tr("Select mpv"), QString(), tr("mpv (mpv.exe);;Programs (*.exe)"));
+        if (mpv.isEmpty())
+            return;
+        mpv = mpvExe(QDir::toNativeSeparators(mpv));
+        settings->setValue("mpvPath", mpv);
+    }
+
+    if (!m_preview)
+    {
+        m_preview = new MpvPreview(this);
+        connect(m_preview, &MpvPreview::delayChanged, this, &TsMuxerWindow::onPreviewDelayChangedInMpv);
+        connect(m_preview, &MpvPreview::finished, this, [this] { m_previewKey.clear(); });
+        connect(m_preview, &MpvPreview::trackNotFound, this, [this] {
+            QMessageBox::warning(this, tr("Delay preview"),
+                                 tr("mpv did not find this audio track in the file and plays another one. Check which "
+                                    "track you hear before trusting the delay."));
+        });
+    }
+    const QString key = previewTrackKey(audio);
+    if (m_preview->isRunning() && key == m_previewKey)
+    {
+        m_preview->raise();
+        return;
+    }
+    // Another track: mpv starts again with it, at the point the film had reached.
+    source.start = m_preview->isRunning() ? m_preview->position() : 0;
+    m_preview->stop();
+    m_previewKey = key;
+    m_previewNative = audio->nativeDelay;
+    source.title = previewTitle(audio);
+    source.hint = tr("Delay: + and - change it by 10 ms, Ctrl + and Ctrl - by 100 ms. tsMuxeR's Delay field "
+                     "follows.");
+    if (!m_preview->start(mpv, source, audio->delay - m_previewNative))
+    {
+        m_previewKey.clear();
+        QMessageBox::warning(this, tr("Delay preview"), tr("Can't start \"%1\"").arg(mpv));
+    }
+#endif
+}
+
+// The field changed: mpv follows when it plays this track.
+void TsMuxerWindow::previewDelayEdited(const QtvCodecInfo* codecInfo)
+{
+#ifdef TSMUXER_MPV_PREVIEW
+    if (!m_preview || !m_preview->isRunning() || m_previewKey.isEmpty() || previewTrackKey(codecInfo) != m_previewKey)
+        return;
+    m_preview->setDelay(codecInfo->delay - m_previewNative);
+    updatePreviewTitle();
+#else
+    Q_UNUSED(codecInfo);
+#endif
+}
+
+// mpv's keys changed the delay: the track's delay, and the field when the track is the one shown, follow.
+void TsMuxerWindow::onPreviewDelayChangedInMpv(const int mpvDelayMs)
+{
+    QtvCodecInfo* codecInfo = previewedCodec();
+    if (!codecInfo)
+        return;
+    const int delay = qBound(ui->editDelay->minimum(), mpvDelayMs + m_previewNative, ui->editDelay->maximum());
+    if (delay != codecInfo->delay)
+    {
+        codecInfo->delay = delay;
+        if (getCurrentCodec() == codecInfo)
+        {
+            const QSignalBlocker blocker(ui->editDelay);
+            ui->editDelay->setValue(delay);
+        }
+        updateMetaLines();
+    }
+    updatePreviewTitle();
+}
+
+// The window title says which track plays and the delay it will have in the output: tsMuxeR's value, which is not
+// mpv's own when the source already places the track.
+QString TsMuxerWindow::previewTitle(const QtvCodecInfo* codecInfo) const
+{
+    QString track = codecInfo->displayName;
+    if (!codecInfo->lang.isEmpty())
+        track += ' ' + codecInfo->lang;
+    if (!codecInfo->trackName.isEmpty())
+        track += QLatin1String(" - ") + codecInfo->trackName;
+    return tr("tsMuxeR preview - %1 - delay %2 ms").arg(track).arg(codecInfo->delay);
+}
+
+// After a change of the delay: the title, and the value on the picture for a moment.
+void TsMuxerWindow::updatePreviewTitle()
+{
+#ifdef TSMUXER_MPV_PREVIEW
+    const QtvCodecInfo* codecInfo = previewedCodec();
+    if (!m_preview || !codecInfo)
+        return;
+    m_preview->setTitle(previewTitle(codecInfo));
+    m_preview->showText(tr("Delay: %1 ms").arg(codecInfo->delay));
+#endif
 }
 
 void TsMuxerWindow::onInputFilesContextMenu(const QPoint &pos)
@@ -6672,6 +6911,7 @@ void TsMuxerWindow::applyOutputMode(const bool resetAudioPes)
     if (resetAudioPes)
         ui->checkBoxNewAudioPes->setChecked(!ui->radioButtonTS->isChecked());
     ui->editDelay->setEnabled(!ui->radioButtonDemux->isChecked());
+    ui->previewDelayBtn->setEnabled(ui->editDelay->isEnabled());
     ui->checkBoxNewAudioPes->setEnabled(ui->radioButtonTS->isChecked() || ui->radioButtonM2TS->isChecked());
     // The Dolby Vision profile only means anything for Matroska output, so it is hidden rather
     // than greyed out anywhere else: a disabled control still invites the question of what it is
@@ -6762,6 +7002,7 @@ void TsMuxerWindow::RadioButtonMuxClick()
     ui->DiskLabelEdit->setVisible(ui->radioButtonBluRayISO->isChecked());
     updateMkvOutputOptions();
     ui->editDelay->setEnabled(!ui->radioButtonDemux->isChecked());
+    ui->previewDelayBtn->setEnabled(ui->editDelay->isEnabled());
     updateMkvTrackOptionsEnabled();
     colorizeAllRows();
     applyInputNameToOutput();
